@@ -1,0 +1,875 @@
+const { Server } = require('socket.io');
+const requestIp = require('request-ip');
+const crypto = require('crypto');
+
+const io = new Server(8000, {
+    cors: {
+        origin: '*',
+        methods: ['GET', 'POST']
+    }
+});
+
+// Store waiting users for random chat
+const waitingUsers = new Set();
+
+// Store waiting users for anonymous voice chat (audio only)
+const waitingVoiceUsers = new Set();
+
+// Map to store active voice chat rooms and their participants
+const voiceChatRooms = new Map(); // Map<roomId, { participants: Map<socketId, { joinedAt }> }>
+
+// Store active group rooms
+const groupRooms = new Map(); // Map<roomId, {name, participants: Map<socketId, {name, avatar}>}>
+
+// Store public rooms
+const publicRooms = new Map(); // Map<roomId, {name, description, createdBy, createdAt, participants: Map<socketId, {name, avatar, joinedAt}>, maxParticipants}>
+const MAX_PUBLIC_ROOM_PARTICIPANTS = 10;
+
+// Store reports by IP address
+const reportedIPs = new Map(); // Map<IP, reportCount>
+const bannedIPs = new Set(); // Set of permanently banned IPs
+const tempBannedIPs = new Map(); // Map<IP, unbanTime>
+
+// Check if an IP is banned
+function isIPBanned(ip) {
+    if (!ip) return false;
+    
+    // Check permanent bans
+    if (bannedIPs.has(ip)) {
+        return { banned: true, permanent: true };
+    }
+    
+    // Check temporary bans
+    if (tempBannedIPs.has(ip)) {
+        const unbanTime = tempBannedIPs.get(ip);
+        if (Date.now() < unbanTime) {
+            return { 
+                banned: true, 
+                permanent: false, 
+                remainingTime: Math.ceil((unbanTime - Date.now()) / (1000 * 60)) // minutes
+            };
+        } else {
+            // Ban expired
+            tempBannedIPs.delete(ip);
+        }
+    }
+    
+    return { banned: false };
+}
+
+// Handle reports
+function handleReport(reportedIP) {
+    if (!reportedIP) return;
+    
+    // Increment report count
+    const currentReports = reportedIPs.get(reportedIP) || 0;
+    const newReportCount = currentReports + 1;
+    reportedIPs.set(reportedIP, newReportCount);
+    
+    console.log(`IP ${reportedIP} has been reported ${newReportCount} times`);
+    
+    // Check if action needs to be taken
+    if (newReportCount >= 10) {
+        // Permanent ban
+        bannedIPs.add(reportedIP);
+        console.log(`IP ${reportedIP} has been permanently banned`);
+    } else if (newReportCount >= 5) {
+        // Temporary ban (24 hours)
+        const banDuration = 24 * 60 * 60 * 1000; // 24 hours in ms
+        const unbanTime = Date.now() + banDuration;
+        tempBannedIPs.set(reportedIP, unbanTime);
+        console.log(`IP ${reportedIP} has been temporarily banned for 24 hours`);
+    }
+    
+    return newReportCount;
+}
+
+// Detect VPN (simplified implementation - in production you would use a proper VPN detection service)
+function isVPN(ip) {
+    // This is a placeholder. In a real implementation, you would use a service
+    // like IPHub, IPQualityScore, or similar to detect VPNs, proxies, etc.
+    return false;
+}
+
+// Generate a random anonymous ID for voice chat users
+function generateAnonymousId() {
+  return crypto.randomBytes(4).toString('hex');
+}
+
+io.on("connection", (socket) => {
+  // Get client IP address
+  const clientIP = socket.handshake.headers['x-forwarded-for'] || 
+                   socket.handshake.address || 
+                   socket.conn.remoteAddress;
+  
+  console.log(`Socket Connected`, socket.id, `IP: ${clientIP}`);
+  
+  // Store IP in socket data
+  socket.data.ip = clientIP;
+  
+  // Check if IP is banned
+  const banStatus = isIPBanned(clientIP);
+  if (banStatus.banned) {
+    if (banStatus.permanent) {
+      socket.emit('banned', { permanent: true, message: 'Your device has been permanently banned due to multiple reports.' });
+    } else {
+      socket.emit('banned', { 
+        permanent: false, 
+        remainingTime: banStatus.remainingTime,
+        message: `Your device has been temporarily banned due to multiple reports. You can try again in ${banStatus.remainingTime} minutes.` 
+      });
+    }
+    // Disconnect the banned user
+    socket.disconnect(true);
+    return;
+  }
+  
+  // Check for VPN
+  if (isVPN(clientIP)) {
+    socket.emit('banned', { message: 'VPN usage is not allowed. Please disable your VPN and try again.' });
+    socket.disconnect(true);
+    return;
+  }
+
+  // Handle random chat
+  socket.on("join-random", () => {
+    console.log('User joined random chat', socket.id);
+    
+    // Remove user from waiting list if they're already there
+    waitingUsers.delete(socket.id);
+    
+    if (waitingUsers.size > 0) {
+      // Match with a waiting user
+      const partnerId = waitingUsers.values().next().value;
+      waitingUsers.delete(partnerId);
+      
+      console.log(`Matching ${socket.id} with ${partnerId}`);
+      
+      // Notify both users
+      socket.emit('match-found', { partnerId });
+      socket.to(partnerId).emit('match-found', { partnerId: socket.id });
+    } else {
+      // Add to waiting list
+      waitingUsers.add(socket.id);
+      console.log('Added to waiting list:', socket.id);
+      console.log('Current waiting users:', waitingUsers.size);
+    }
+  });
+
+  // Handle chat ending
+  socket.on("end-chat", () => {
+    console.log('Chat ended by', socket.id);
+    // Remove from waiting list if they were waiting
+    waitingUsers.delete(socket.id);
+    
+    // Notify partner if they exist
+    const partnerRoom = io.sockets.adapter.rooms.get(socket.id);
+    if (partnerRoom) {
+      partnerRoom.forEach(partnerId => {
+        if (partnerId !== socket.id) {
+          socket.to(partnerId).emit('end-chat');
+        }
+      });
+    }
+  });
+
+  // Handle WebRTC signaling
+  socket.on("offer", ({ to, offer }) => {
+    console.log('Offer received');
+    socket.to(to).emit("offer", { from: socket.id, offer });
+  });
+
+  socket.on("answer", ({ to, ans }) => {
+    console.log('Answer received');
+    socket.to(to).emit("answer", { from: socket.id, ans });
+  });
+
+  // Handle peer negotiation for WebRTC
+  socket.on("peer-nego-needed", ({ to, offer }) => {
+    console.log('Peer negotiation needed');
+    socket.to(to).emit("peer-nego-needed", { from: socket.id, offer });
+  });
+
+  socket.on("peer-nego-done", ({ to, ans }) => {
+    console.log('Peer negotiation done');
+    socket.to(to).emit("peer-nego-final", { ans });
+  });
+
+  // Handle room-based calls (for regular rooms)
+  socket.on("start-call", ({ to, offer }) => {
+    console.log('Start call received');
+    socket.to(to).emit("offer", { from: socket.id, offer });
+  });
+
+  // Handle room joining
+  socket.on("join-room", ({ email, room }) => {
+    console.log(`User ${email} joined room ${room}`);
+    // Store email in socket data for later reference
+    socket.data.email = email;
+    socket.data.room = room;
+    socket.join(room);
+    socket.to(room).emit("user-joined", { email, id: socket.id });
+    socket.emit("join-room", { email, room });
+  });
+  
+  // Handle get-users-in-room event
+  socket.on("get-users-in-room", ({ room }) => {
+    console.log(`Getting users in room ${room}`);
+    // Get all socket IDs in the room
+    const roomSockets = io.sockets.adapter.rooms.get(room);
+    
+    if (roomSockets) {
+      // Create an array to store user information
+      const users = [];
+      
+      // Iterate through all socket IDs in the room
+      roomSockets.forEach(socketId => {
+        const userSocket = io.sockets.sockets.get(socketId);
+        if (userSocket) {
+          users.push({
+            id: socketId,
+            email: userSocket.data.email || 'unknown'
+          });
+        }
+      });
+      
+      // Send the list of users back to the requesting client
+      socket.emit("users-in-room", { users });
+    } else {
+      // If room doesn't exist or is empty
+      socket.emit("users-in-room", { users: [] });
+    }
+  });
+
+  // Handle chat messages
+  socket.on("send-message", (messageData) => {
+    console.log('Chat message received:', messageData);
+    
+    const { room, sender, senderId, text, to } = messageData;
+    
+    if (to) {
+      // Direct message to a specific user
+      socket.to(to).emit('chat-message', { sender, senderId, text });
+    } else if (room) {
+      // Broadcast to room
+      socket.to(room).emit('chat-message', { sender, senderId, text });
+    }
+  });
+  
+  // Handle user reports
+  socket.on("report-user", ({ userId }) => {
+    console.log(`User ${socket.id} reported user ${userId}`);
+    
+    // Find the reported user's socket
+    const reportedSocket = io.sockets.sockets.get(userId);
+    
+    if (reportedSocket && reportedSocket.data.ip) {
+      const reportedIP = reportedSocket.data.ip;
+      
+      // Process the report
+      const reportCount = handleReport(reportedIP);
+      
+      // Notify the reporting user
+      socket.emit('report-processed', { 
+        success: true, 
+        message: 'Report submitted successfully' 
+      });
+      
+      // If the user now has enough reports to be banned, disconnect them
+      if (reportCount >= 5) {
+        // Check if they should be permanently or temporarily banned
+        const isPermanent = reportCount >= 10;
+        
+        // Notify the reported user
+        reportedSocket.emit('banned', { 
+          permanent: isPermanent,
+          message: isPermanent 
+            ? 'Your device has been permanently banned due to multiple reports.' 
+            : 'Your device has been temporarily banned for 24 hours due to multiple reports.'
+        });
+        
+        // Disconnect the reported user
+        reportedSocket.disconnect(true);
+      }
+    } else {
+      socket.emit('report-processed', { 
+        success: false, 
+        message: 'Could not process report. User may have already disconnected.' 
+      });
+    }
+  });
+
+  // Handle public room creation
+  socket.on('create-public-room', ({ name, description, creatorName, creatorAvatar }) => {
+    try {
+      const roomId = `public-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+      
+      // Create the public room
+      const room = {
+        name: name || `Room ${roomId.substring(7, 12)}`,
+        description: description || 'A public video chat room',
+        createdBy: creatorName || 'Anonymous',
+        createdAt: new Date(),
+        participants: new Map(),
+        maxParticipants: MAX_PUBLIC_ROOM_PARTICIPANTS
+      };
+      
+      publicRooms.set(roomId, room);
+      
+      console.log(`Public room created: ${room.name} (${roomId}) by ${creatorName || 'Anonymous'}`);
+      
+      // Notify all clients about the new room
+      io.emit('public-room-created', {
+        id: roomId,
+        name: room.name,
+        description: room.description,
+        createdBy: room.createdBy,
+        createdAt: room.createdAt,
+        participantCount: 0,
+        maxParticipants: room.maxParticipants,
+        isFull: false
+      });
+      
+      // Send success response to the creator
+      socket.emit('public-room-created-success', { roomId });
+      
+    } catch (error) {
+      console.error('Error creating public room:', error);
+      socket.emit('error', 'Failed to create room. Please try again.');
+    }
+  });
+  
+  socket.on("leave-group-room", () => {
+    const roomId = socket.data.groupRoomId;
+    if (roomId) {
+      handleGroupRoomLeave(socket, roomId);
+    }
+  });
+  
+  socket.on("offer", ({ to, offer }) => {
+    console.log(`Forwarding offer from ${socket.id} to ${to}`);
+    socket.to(to).emit("offer", { from: socket.id, offer });
+  });
+  
+  socket.on("answer", ({ to, answer }) => {
+    console.log(`Forwarding answer from ${socket.id} to ${to}`);
+    socket.to(to).emit("answer", { from: socket.id, answer });
+  });
+  
+  socket.on("ice-candidate", ({ to, candidate }) => {
+    socket.to(to).emit("ice-candidate", { from: socket.id, candidate });
+  });
+  
+  socket.on("send-public-message", ({ roomId, message }) => {
+    if (!roomId || !message) return;
+    
+    const room = publicRooms.get(roomId);
+    if (!room) {
+      console.log(`Public room ${roomId} not found`);
+      return;
+    }
+    
+    const participant = room.participants.get(socket.id);
+    const userName = participant?.name || "Anonymous";
+    
+    const chatMessage = {
+      id: `${socket.id}-${Date.now()}`,
+      sender: userName,
+      senderId: socket.id,
+      text: message,
+      timestamp: new Date(),
+      type: "text"
+    };
+    
+    console.log(`Public room message in ${roomId} from ${userName}: ${message}`);
+    
+    // Broadcast to everyone in the room except sender
+    socket.to(roomId).emit("public-chat-message", chatMessage);
+  });
+  
+  socket.on("media-state-change", ({ roomId, audioEnabled, videoEnabled }) => {
+    if (!roomId) return;
+    
+    const room = publicRooms.get(roomId);
+    if (!room) {
+      console.log(`Public room ${roomId} not found`);
+      return;
+    }
+    
+    const participant = room.participants.get(socket.id);
+    if (participant) {
+      // Update participant's media state in the room
+      participant.audioEnabled = audioEnabled;
+      participant.videoEnabled = videoEnabled;
+      
+      console.log(`Participant ${participant.name} media state: audio=${audioEnabled}, video=${videoEnabled}`);
+      
+      // Broadcast to everyone in the room except sender
+      socket.to(roomId).emit("participant-media-state-changed", {
+        participantId: socket.id,
+        audioEnabled,
+        videoEnabled
+      });
+    }
+  });
+  
+  socket.on("send-group-message", ({ roomId, text }) => {
+    if (!roomId || !text) return;
+    
+    const userName = socket.data.userName || "Anonymous";
+    const message = {
+      id: `${socket.id}-${Date.now()}`,
+      sender: userName,
+      senderId: socket.id,
+      text,
+      timestamp: new Date(),
+      type: "text"
+    };
+    
+    console.log(`Group message in ${roomId} from ${userName}: ${text}`);
+    
+    // Broadcast to everyone in the room including sender
+    io.to(roomId).emit("group-chat-message", message);
+  });
+  
+  socket.on("typing-group", ({ roomId, isTyping }) => {
+    const userName = socket.data.userName || "Anonymous";
+    socket.to(roomId).emit("user-typing", { userId: socket.id, userName, isTyping });
+  });
+  
+  socket.on("get-active-group-rooms", () => {
+    const activeRooms = [];
+    groupRooms.forEach((room, id) => {
+      // Only include rooms with participants
+      if (room.participants.size > 0) {
+        activeRooms.push({
+          id,
+          name: room.name,
+          participantCount: room.participants.size,
+          createdAt: room.createdAt
+        });
+      }
+    });
+    
+    socket.emit("active-group-rooms", { rooms: activeRooms });
+  });
+
+  // Anonymous voice chat functions
+  socket.on("join-voice-chat", () => {
+    console.log('User joined anonymous voice chat pool', socket.id);
+    
+    // Remove user from voice waiting list if they're already there
+    waitingVoiceUsers.delete(socket.id);
+    
+    // Generate anonymous ID
+    const anonymousId = generateAnonymousId();
+    socket.data.anonymousId = anonymousId;
+    
+    if (waitingVoiceUsers.size > 0) {
+      // Match with a waiting user
+      const partnerId = waitingVoiceUsers.values().next().value;
+      waitingVoiceUsers.delete(partnerId);
+      
+      // Create a unique room ID for the voice chat
+      const roomId = `voice-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+      
+      // Create room tracking
+      voiceChatRooms.set(roomId, {
+        createdAt: new Date(),
+        participants: new Map([
+          [socket.id, { joinedAt: new Date() }],
+          [partnerId, { joinedAt: new Date() }]
+        ])
+      });
+      
+      // Store room ID in socket data
+      socket.data.voiceRoomId = roomId;
+      io.sockets.sockets.get(partnerId).data.voiceRoomId = roomId;
+      
+      // Join the room
+      socket.join(roomId);
+      io.sockets.sockets.get(partnerId).join(roomId);
+      
+      // Get partner anonymous ID
+      const partnerAnonymousId = io.sockets.sockets.get(partnerId).data.anonymousId || generateAnonymousId();
+      
+      // Notify both users of the match
+      socket.emit("voice-match-found", { 
+        partnerId, 
+        roomId,
+        partnerAnonymousId
+      });
+      
+      io.to(partnerId).emit("voice-match-found", { 
+        partnerId: socket.id, 
+        roomId,
+        partnerAnonymousId: anonymousId
+      });
+      
+      console.log(`Matched voice chat users: ${socket.id} and ${partnerId} in room ${roomId}`);
+    } else {
+      // Add to waiting list
+      waitingVoiceUsers.add(socket.id);
+      socket.emit("waiting-for-voice-match");
+    }
+  });
+  
+  socket.on("leave-voice-chat", () => {
+    const roomId = socket.data.voiceRoomId;
+    if (roomId) {
+      handleVoiceChatLeave(socket, roomId);
+    }
+  });
+  
+  socket.on("skip-voice-chat", () => {
+    const roomId = socket.data.voiceRoomId;
+    if (roomId) {
+      // Notify other participant
+      socket.to(roomId).emit("voice-chat-ended", { reason: "skipped" });
+      
+      // Handle leave for current user
+      handleVoiceChatLeave(socket, roomId);
+      
+      // Automatically join new chat
+      socket.emit("can-rejoin-voice");
+    }
+  });
+
+  // Public Rooms functionality
+  socket.on("get-public-rooms", () => {
+    const rooms = [];
+    publicRooms.forEach((room, id) => {
+      rooms.push({
+        id,
+        name: room.name,
+        description: room.description,
+        createdBy: room.createdBy,
+        createdAt: room.createdAt,
+        participantCount: room.participants.size,
+        maxParticipants: room.maxParticipants,
+        isFull: room.participants.size >= room.maxParticipants
+      });
+    });
+    
+    socket.emit("public-rooms-list", { rooms });
+  });
+
+  socket.on("create-public-room", ({ name, description, creatorName, creatorAvatar }) => {
+    // Check if a room with the same name already exists
+    const roomName = name || `Room ${Date.now()}`;
+    const existingRoom = Array.from(publicRooms.entries()).find(
+      ([, room]) => room.name.toLowerCase() === roomName.toLowerCase()
+    );
+
+    if (existingRoom) {
+      console.log(`Room with name "${roomName}" already exists, redirecting to existing room`);
+      socket.emit("public-room-exists", { roomId: existingRoom[0] });
+      return;
+    }
+
+    const roomId = `public-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+    
+    const newRoom = {
+      name: roomName,
+      description: description || "No description",
+      createdBy: creatorName || "Anonymous",
+      createdAt: new Date(),
+      participants: new Map(),
+      maxParticipants: MAX_PUBLIC_ROOM_PARTICIPANTS
+    };
+    
+    publicRooms.set(roomId, newRoom);
+    
+    console.log(`Public room created: ${roomId} (${roomName}) by ${creatorName}`);
+    
+    // Notify all clients about the new room
+    const roomData = {
+      id: roomId,
+      name: newRoom.name,
+      description: newRoom.description,
+      createdBy: newRoom.createdBy,
+      createdAt: newRoom.createdAt,
+      participantCount: 0,
+      maxParticipants: newRoom.maxParticipants,
+      isFull: false
+    };
+    
+    io.emit("public-room-created", roomData);
+    socket.emit("public-room-created-success", { roomId });
+  });
+
+  socket.on("join-public-room", ({ roomId, userName, avatar }) => {
+    const room = publicRooms.get(roomId);
+    
+    if (!room) {
+      socket.emit("join-public-room-error", { message: "Room not found" });
+      return;
+    }
+    
+    if (room.participants.size >= room.maxParticipants) {
+      socket.emit("join-public-room-error", { message: "Room is full" });
+      return;
+    }
+    
+    console.log(`User ${socket.id} (${userName}) joined public room ${roomId}`);
+    
+    // Store user info in socket data
+    socket.data.userName = userName;
+    socket.data.avatar = avatar;
+    socket.data.publicRoomId = roomId;
+    
+    // Join the room
+    socket.join(roomId);
+    
+    // Add participant to room
+    room.participants.set(socket.id, {
+      id: socket.id,
+      name: userName,
+      avatar: avatar,
+      joinedAt: new Date()
+    });
+    
+    // Send room info to the user
+    socket.emit("public-room-joined", {
+      roomId,
+      name: room.name,
+      description: room.description,
+      participantCount: room.participants.size,
+      maxParticipants: room.maxParticipants
+    });
+    
+    // Notify all users in the room about the new participant
+    socket.to(roomId).emit("public-participant-joined", {
+      id: socket.id,
+      name: userName,
+      avatar: avatar
+    });
+    
+    // Send system message about user joining
+    io.to(roomId).emit("public-chat-message", {
+      id: `system-${Date.now()}`,
+      sender: "System",
+      senderId: "system",
+      text: `${userName} joined the room`,
+      timestamp: new Date(),
+      type: "join"
+    });
+    
+    // Send the list of existing participants to the new user
+    const participants = [];
+    room.participants.forEach((participant, id) => {
+      if (id !== socket.id) {
+        participants.push(participant);
+      }
+    });
+    
+    socket.emit("public-existing-participants", { participants });
+    
+    // Notify all clients about room update
+    io.emit("public-room-updated", {
+      id: roomId,
+      participantCount: room.participants.size,
+      isFull: room.participants.size >= room.maxParticipants
+    });
+  });
+
+  socket.on("leave-public-room", () => {
+    const roomId = socket.data.publicRoomId;
+    if (roomId) {
+      handlePublicRoomLeave(socket, roomId);
+    }
+  });
+
+  socket.on("send-public-message", ({ roomId, text }) => {
+    if (!roomId || !text) return;
+    
+    const userName = socket.data.userName || "Anonymous";
+    const message = {
+      id: `${socket.id}-${Date.now()}`,
+      sender: userName,
+      senderId: socket.id,
+      text,
+      timestamp: new Date(),
+      type: "text"
+    };
+    
+    console.log(`Public room message in ${roomId} from ${userName}: ${text}`);
+    
+    // Broadcast to everyone in the room including sender
+    io.to(roomId).emit("public-chat-message", message);
+  });
+
+  socket.on("typing-public", ({ roomId, isTyping }) => {
+    const userName = socket.data.userName || "Anonymous";
+    socket.to(roomId).emit("public-user-typing", { userId: socket.id, userName, isTyping });
+  });
+
+  socket.on("disconnect", () => {
+    console.log('User disconnected:', socket.id);
+    // Remove from waiting lists if they were waiting
+    waitingUsers.delete(socket.id);
+    waitingVoiceUsers.delete(socket.id);
+    
+    // Handle group room leave if they were in one
+    const roomId = socket.data.groupRoomId;
+    if (roomId) {
+      handleGroupRoomLeave(socket, roomId);
+    }
+    
+    // Handle voice chat room leave if they were in one
+    const voiceRoomId = socket.data.voiceRoomId;
+    if (voiceRoomId) {
+      handleVoiceChatLeave(socket, voiceRoomId);
+    }
+    
+    // Handle public room leave if they were in one
+    const publicRoomId = socket.data.publicRoomId;
+    if (publicRoomId) {
+      handlePublicRoomLeave(socket, publicRoomId);
+    }
+    
+    // Notify partner if they exist (for random chat)
+    const partnerRoom = io.sockets.adapter.rooms.get(socket.id);
+    if (partnerRoom) {
+      partnerRoom.forEach(partnerId => {
+        if (partnerId !== socket.id) {
+          socket.to(partnerId).emit('end-chat');
+        }
+      });
+    }
+  });
+});
+
+// Helper function to handle a user leaving a group room
+function handleGroupRoomLeave(socket, roomId) {
+  const room = groupRooms.get(roomId);
+  if (!room) return;
+  
+  const userName = socket.data.userName || "Anonymous";
+  
+  // Remove participant from room
+  room.participants.delete(socket.id);
+  
+  // Notify others that this participant left
+  socket.to(roomId).emit("participant-left", { id: socket.id });
+  
+  // Send system message about user leaving
+  io.to(roomId).emit("group-chat-message", {
+    id: `system-${Date.now()}`,
+    sender: "System",
+    senderId: "system",
+    text: `${userName} left the room`,
+    timestamp: new Date(),
+    type: "leave"
+  });
+  
+  // Leave the socket.io room
+  socket.leave(roomId);
+  
+  // Update room info for remaining participants
+  socket.to(roomId).emit("room-info", {
+    name: room.name,
+    participantCount: room.participants.size
+  });
+  
+  // Clean up empty rooms after a delay
+  if (room.participants.size === 0) {
+    setTimeout(() => {
+      // Double check if still empty
+      const currentRoom = groupRooms.get(roomId);
+      if (currentRoom && currentRoom.participants.size === 0) {
+        groupRooms.delete(roomId);
+        console.log(`Removed empty group room ${roomId}`);
+      }
+    }, 60000); // 1 minute delay
+  }
+  
+  // Clear room data from socket
+  socket.data.groupRoomId = null;
+}
+
+// Helper function to handle a user leaving a voice chat room
+function handleVoiceChatLeave(socket, roomId) {
+  const room = voiceChatRooms.get(roomId);
+  if (!room) return;
+  
+  // Remove participant from room
+  room.participants.delete(socket.id);
+  
+  // Notify others that this participant left
+  socket.to(roomId).emit("voice-chat-ended", { reason: "left" });
+  
+  // Leave the socket.io room
+  socket.leave(roomId);
+  
+  // Clean up empty rooms immediately
+  if (room.participants.size === 0) {
+    voiceChatRooms.delete(roomId);
+    console.log(`Removed empty voice chat room ${roomId}`);
+  }
+  
+  // Clear room data from socket
+  socket.data.voiceRoomId = null;
+  socket.data.anonymousId = null;
+}
+
+// Helper function to handle a user leaving a public room
+function handlePublicRoomLeave(socket, roomId) {
+  const room = publicRooms.get(roomId);
+  if (!room) return;
+  
+  const userName = socket.data.userName || "Anonymous";
+  
+  // Remove participant from room
+  room.participants.delete(socket.id);
+  
+  // Notify others that this participant left
+  socket.to(roomId).emit("public-participant-left", { id: socket.id });
+  
+  // Send system message about user leaving
+  io.to(roomId).emit("public-chat-message", {
+    id: `system-${Date.now()}`,
+    sender: "System",
+    senderId: "system",
+    text: `${userName} left the room`,
+    timestamp: new Date(),
+    type: "leave"
+  });
+  
+  // Leave the socket.io room
+  socket.leave(roomId);
+  
+  // Update room info for remaining participants
+  socket.to(roomId).emit("public-room-info", {
+    name: room.name,
+    description: room.description,
+    participantCount: room.participants.size,
+    maxParticipants: room.maxParticipants
+  });
+  
+  // Notify all clients about room update
+  io.emit("public-room-updated", {
+    id: roomId,
+    participantCount: room.participants.size,
+    isFull: room.participants.size >= room.maxParticipants
+  });
+  
+  // Clean up empty rooms after a delay
+  if (room.participants.size === 0) {
+    setTimeout(() => {
+      // Double check if still empty
+      const currentRoom = publicRooms.get(roomId);
+      if (currentRoom && currentRoom.participants.size === 0) {
+        publicRooms.delete(roomId);
+        console.log(`Removed empty public room ${roomId}`);
+        
+        // Notify all clients that room was deleted
+        io.emit("public-room-deleted", { id: roomId });
+      }
+    }, 300000); // 5 minutes delay
+  }
+  
+  // Clear room data from socket
+  socket.data.publicRoomId = null;
+}
+

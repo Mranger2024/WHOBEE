@@ -1,0 +1,1313 @@
+"use client";
+
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { useSocket } from '@/context/SocketProvider';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { cn } from '@/lib/utils';
+import { 
+  Mic, 
+  MicOff, 
+  Video, 
+  VideoOff, 
+  ScreenShare, 
+  ScreenShareOff, 
+  PhoneOff, 
+  MessageSquare, 
+  Users, 
+  Settings, 
+  X,
+  Maximize2,
+  Minimize2,
+  ArrowLeft
+} from 'lucide-react';
+// Using a simple UUID v4 implementation instead of the uuid package
+const uuidv4 = () => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
+// Simple toast implementation
+const toast = {
+  error: (message: string) => console.error(message),
+  success: (message: string) => console.log(message)
+};
+import { 
+  PublicRoomParticipant, 
+  PublicRoomMessage,
+  PublicRoomInfo
+} from '@/types/public-room';
+import { ParticipantVideo } from '@/components/public-room/participant-video';
+import { Chat } from '@/components/public-room/chat';
+import { ParticipantsList } from '@/components/public-room/participants-list';
+
+// Helper function to get initials from name
+const getInitials = (name: string) => {
+  return name
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .substring(0, 2);
+};
+
+export default function PublicRoomPage() {
+  const router = useRouter();
+  const params = useParams<{ roomId: string }>();
+  const roomId = params.roomId || ''; // Ensure roomId is always a string
+  const socket = useSocket();
+  
+  // Room state
+  const [roomInfo, setRoomInfo] = useState<PublicRoomInfo | null>(null);
+  const [participants, setParticipants] = useState<PublicRoomParticipant[]>([]);
+  const [messages, setMessages] = useState<PublicRoomMessage[]>([]);
+  const [isConnected, setIsConnected] = useState(false);
+  
+  // User media state
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  
+  // UI state
+  const [showChat, setShowChat] = useState(true);
+  const [showParticipants, setShowParticipants] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [userName, setUserName] = useState<string>('');
+  const [isJoining, setIsJoining] = useState(false);
+  
+  // Refs
+  const localVideoRef = useRef<HTMLVideoElement>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const peerConnections = useRef<Record<string, RTCPeerConnection>>({});
+  const dataChannels = useRef<Record<string, RTCDataChannel>>({});
+  const makingOffer = useRef<Record<string, boolean>>({});
+  const ignoreOffer = useRef<Record<string, boolean>>({});
+  const screenShareRef = useRef<MediaStream | null>(null);
+  
+  // Initialize user media
+  const initializeMedia = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 },
+        },
+      });
+      
+      localStreamRef.current = stream;
+      setLocalStream(stream);
+      
+      // Set video element source with a small delay to ensure DOM is ready
+      setTimeout(() => {
+        if (localVideoRef.current && stream) {
+          localVideoRef.current.srcObject = stream;
+          localVideoRef.current.muted = true; // Mute local video to prevent feedback
+          localVideoRef.current.play().catch(err => {
+            console.error('Error playing local video:', err);
+          });
+        }
+      }, 100);
+      
+      return stream;
+    } catch (error) {
+      console.error('Error accessing media devices:', error);
+      toast.error('Could not access camera or microphone');
+      return null;
+    }
+  }, []);
+  
+  // Join room
+  const joinRoom = useCallback(async () => {
+    if (!socket || !userName.trim()) {
+      toast.error('Please enter your name');
+      return;
+    }
+    
+    setIsJoining(true);
+    
+    try {
+      // Initialize media
+      const stream = await initializeMedia();
+      if (!stream) {
+        setIsJoining(false);
+        return;
+      }
+      
+      // Create participant object for local user
+      const localParticipant: PublicRoomParticipant = {
+        id: socket?.id || `user-${Date.now()}`,
+        name: userName,
+        joinedAt: new Date(),
+        audioEnabled: isAudioEnabled,
+        videoEnabled: isVideoEnabled,
+        isSpeaking: false,
+        isMe: true,
+        stream: stream,
+      };
+      
+      console.log('Setting local participant with stream:', stream);
+      setParticipants([localParticipant]);
+      
+      // Join room via socket
+      socket.emit('join-public-room', {
+        roomId,
+        userName,
+        avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${userName}`,
+      });
+      
+      setIsConnected(true);
+      
+      // Add system message
+      addSystemMessage('You joined the room');
+      
+    } catch (error) {
+      console.error('Error joining room:', error);
+      toast.error('Failed to join room');
+      setIsJoining(false);
+    }
+  }, [socket, userName, roomId, isAudioEnabled, isVideoEnabled, initializeMedia]);
+  
+  // Handle incoming messages
+  const handleIncomingMessage = useCallback((message: PublicRoomMessage) => {
+    setMessages((prev) => [...prev, message]);
+  }, []);
+  
+  // Handle participant joined
+  const handleParticipantJoined = useCallback(({ id, name, avatar }: { id: string; name: string; avatar?: string }) => {
+    if (id === socket?.id) return; // Skip self
+    
+    setParticipants((prev) => {
+      // Check if participant already exists
+      if (prev.some((p) => p.id === id)) return prev;
+      
+      return [
+        ...prev,
+        {
+          id,
+          name,
+          avatar,
+          joinedAt: new Date(),
+          isMe: false,
+          audioEnabled: true,
+          videoEnabled: true,
+          isSpeaking: false,
+          stream: undefined,
+        },
+      ];
+    });
+    
+    // Add system message
+    addSystemMessage(`${name} joined the room`);
+    
+    // Initiate WebRTC connection - only the peer with lower ID creates the initial offer
+    if (localStreamRef.current && socket?.id) {
+      const shouldOffer = socket.id < id;
+      console.log(`Participant ${name} joined. My ID: ${socket.id}, Their ID: ${id}, Should I offer: ${shouldOffer}`);
+      
+      // Small delay to ensure both peers have processed the join event
+      setTimeout(() => {
+        if (shouldOffer) {
+          createPeerConnection(id, localStreamRef.current!, true);
+        } else {
+          createPeerConnection(id, localStreamRef.current!, false);
+        }
+      }, 100);
+    }
+  }, [socket?.id]);
+  
+  const handleParticipantLeft = useCallback(({ id }: { id: string }) => {
+    setParticipants((prev) => {
+      const participant = prev.find((p) => p.id === id);
+      if (participant) {
+        // Add system message
+        addSystemMessage(`${participant.name} left the room`);
+        
+        // Close peer connection
+        if (peerConnections.current[id]) {
+          peerConnections.current[id].close();
+          delete peerConnections.current[id];
+        }
+        
+        // Close data channel
+        if (dataChannels.current[id]) {
+          delete dataChannels.current[id];
+        }
+      }
+      
+      return prev.filter((p) => p.id !== id);
+    });
+  }, []);
+  
+  // Handle existing participants
+  const handleExistingParticipants = useCallback(({ participants: existingParticipants }: { participants: Array<{ id: string; name: string; avatar?: string }> }) => {
+    if (!localStreamRef.current) return;
+    
+    existingParticipants.forEach(({ id, name, avatar }) => {
+      if (id === socket?.id) return; // Skip self
+      
+      setParticipants((prev) => [
+        ...prev,
+        {
+          id,
+          name,
+          avatar,
+          joinedAt: new Date(),
+          isMe: false,
+          audioEnabled: true,
+          videoEnabled: true,
+          isSpeaking: false,
+          stream: undefined,
+        },
+      ]);
+      
+      // Initiate WebRTC connection - only the peer with lower ID creates the initial offer
+      if (socket && socket.id) {
+        const shouldOffer = socket.id < id;
+        console.log(`Existing participant ${name}. My ID: ${socket.id}, Their ID: ${id}, Should I offer: ${shouldOffer}`);
+        
+        // Small delay to prevent race conditions
+        setTimeout(() => {
+          if (shouldOffer) {
+            createPeerConnection(id, localStreamRef.current!, true);
+          } else {
+            createPeerConnection(id, localStreamRef.current!, false);
+          }
+        }, 200 + Math.random() * 100); // Staggered delay
+      }
+    });
+  }, [socket?.id]);
+  
+  // Create peer connection
+  const createPeerConnection = async (peerId: string, stream: MediaStream, shouldCreateOffer: boolean) => {
+    if (!socket) return;
+    
+    // Avoid creating duplicate
+    if (peerConnections.current[peerId]) {
+      console.warn(`PeerConnection for ${peerId} already exists`);
+      return;
+    }
+    
+    // Determine if this peer is "polite" (will back off in case of glare)
+    const polite = socket.id! < peerId;
+    console.log(`Creating peer connection with ${peerId}, polite: ${polite}, shouldCreateOffer: ${shouldCreateOffer}`);
+    
+    // Create RTCPeerConnection
+    const peerConnection = new RTCPeerConnection({
+      iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+      ],
+    });
+    
+    // Add local stream to peer connection
+    stream.getTracks().forEach((track) => {
+      try {
+        peerConnection.addTrack(track, stream);
+      } catch (err) {
+        console.error('Error adding track to peerConnection', err);
+      }
+    });
+    
+    // Handle remote stream
+    peerConnection.ontrack = (event) => {
+      const remoteStream = event.streams[0];
+      
+      console.log(`Received remote stream from peer ${peerId}`);
+      
+      setParticipants((prev) =>
+        prev.map((p) => {
+          if (p.id === peerId) {
+            console.log(`Setting stream for participant ${p.name}`);
+            return { ...p, stream: remoteStream };
+          }
+          return p;
+        })
+      );
+    };
+    
+    // Handle ICE candidates
+    peerConnection.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit('ice-candidate', {
+          to: peerId,
+          candidate: event.candidate,
+        });
+      }
+    };
+    
+    // Handle negotiation needed
+    peerConnection.onnegotiationneeded = async () => {
+      try {
+        console.log(`Negotiation needed for ${peerId}`);
+        makingOffer.current[peerId] = true;
+        await peerConnection.setLocalDescription();
+        socket.emit('offer', {
+          to: peerId,
+          offer: peerConnection.localDescription,
+        });
+        console.log(`Sent offer to ${peerId} (negotiation)`);
+      } catch (err) {
+        console.error('Error during negotiation:', err);
+      } finally {
+        makingOffer.current[peerId] = false;
+      }
+    };
+    
+    // Handle connection state changes
+    peerConnection.onconnectionstatechange = () => {
+      console.log(`Connection state for ${peerId}: ${peerConnection.connectionState}`);
+      switch (peerConnection.connectionState) {
+        case 'connected':
+          console.log(`✅ Connected to peer ${peerId}`);
+          break;
+        case 'disconnected':
+        case 'failed':
+          console.log(`❌ Disconnected from peer ${peerId}`);
+          // Clean up
+          if (peerConnections.current[peerId]) {
+            peerConnections.current[peerId].close();
+            delete peerConnections.current[peerId];
+          }
+          
+          if (dataChannels.current[peerId]) {
+            delete dataChannels.current[peerId];
+          }
+          
+          delete makingOffer.current[peerId];
+          delete ignoreOffer.current[peerId];
+          
+          setParticipants((prev) => prev.filter((p) => p.id !== peerId));
+          break;
+      }
+    };
+    
+    // Handle ICE connection state changes
+    peerConnection.oniceconnectionstatechange = () => {
+      console.log(`ICE connection state for ${peerId}: ${peerConnection.iceConnectionState}`);
+      if (peerConnection.iceConnectionState === 'failed') {
+        console.log(`ICE failed for ${peerId}, attempting restart`);
+        peerConnection.restartIce();
+      }
+    };
+    
+    // Create data channel for chat
+    let dataChannel: RTCDataChannel | undefined;
+    if (shouldCreateOffer) {
+      try {
+        dataChannel = peerConnection.createDataChannel(`chat-${socket.id}-${peerId}`);
+        setupDataChannel(peerId, dataChannel);
+      } catch (err) {
+        console.warn('Could not create data channel:', err);
+      }
+    }
+    
+    // Listen for incoming data channels
+    peerConnection.ondatachannel = (event) => {
+      console.log(`Received data channel from ${peerId}`);
+      setupDataChannel(peerId, event.channel);
+    };
+    
+    // Store peer connection and data channel
+    peerConnections.current[peerId] = peerConnection;
+    if (dataChannel) dataChannels.current[peerId] = dataChannel;
+    
+    // Create and send initial offer only if we should
+    if (shouldCreateOffer) {
+      // Wait a bit to ensure the peer connection is fully set up
+      setTimeout(async () => {
+        try {
+          makingOffer.current[peerId] = true;
+          
+          // Check if we're still in stable state
+          if (peerConnection.signalingState !== 'stable') {
+            console.warn(`Cannot create offer for ${peerId}, state is ${peerConnection.signalingState}`);
+            makingOffer.current[peerId] = false;
+            return;
+          }
+          
+          const offer = await peerConnection.createOffer({
+            offerToReceiveAudio: true,
+            offerToReceiveVideo: true
+          });
+          await peerConnection.setLocalDescription(offer);
+          socket.emit('offer', {
+            to: peerId,
+            offer: peerConnection.localDescription,
+          });
+          console.log(`✅ Sent initial offer to ${peerId}`);
+        } catch (error) {
+          console.error('❌ Error creating initial offer for', peerId, error);
+        } finally {
+          makingOffer.current[peerId] = false;
+        }
+      }, 50);
+    }
+  };
+  
+  // Set up data channel
+  const setupDataChannel = (peerId: string, dataChannel: RTCDataChannel) => {
+    dataChannel.onopen = () => {
+      console.log(`Data channel to ${peerId} is open`);
+    };
+    
+    dataChannel.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        handleIncomingMessage({
+          ...message,
+          id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          timestamp: new Date(),
+        });
+      } catch (error) {
+        console.error('Error parsing data channel message:', error);
+      }
+    };
+    
+    dataChannel.onclose = () => {
+      console.log(`Data channel to ${peerId} is closed`);
+      delete dataChannels.current[peerId];
+    };
+    
+    dataChannel.onerror = (error) => {
+      console.error('Data channel error:', error);
+    };
+  };
+  
+  // Handle incoming offer (Perfect Negotiation Pattern)
+  const handleIncomingOffer = useCallback(
+    async ({ from, offer }: { from: string; offer: RTCSessionDescriptionInit }) => {
+      if (!localStreamRef.current || !socket) {
+        console.warn('Local stream or socket not ready when offer arrived');
+        return;
+      }
+      
+      console.log(`📨 Received offer from ${from}`);
+
+      // Create RTCPeerConnection if it doesn't exist
+      if (!peerConnections.current[from]) {
+        console.log(`Creating new peer connection for ${from} (received offer first)`);
+        await createPeerConnection(from, localStreamRef.current, false);
+      }
+      
+      const peerConnection = peerConnections.current[from];
+      if (!peerConnection) {
+        console.error('No peer connection available to handle offer from', from);
+        return;
+      }
+      
+      if (!offer) {
+        console.error('Received null/undefined offer from', from);
+        return;
+      }
+
+      // Perfect negotiation logic
+      const polite = socket.id! < from;
+      const offerCollision = offer.type === 'offer' && 
+        (makingOffer.current[from] || peerConnection.signalingState !== 'stable');
+
+      ignoreOffer.current[from] = !polite && offerCollision;
+      
+      if (ignoreOffer.current[from]) {
+        console.log(`⚠️ Ignoring offer from ${from} (impolite + collision)`);
+        return;
+      }
+
+      try {
+        // Set remote description with the offer
+        console.log(`Setting remote description (offer) from ${from} in state ${peerConnection.signalingState}`);
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+        
+        // Create and send answer
+        console.log('Creating answer...');
+        const answer = await peerConnection.createAnswer();
+        
+        console.log('Setting local description (answer)...');
+        await peerConnection.setLocalDescription(answer);
+        
+        console.log('Sending answer to', from);
+        socket.emit('answer', {
+          to: from,
+          answer: peerConnection.localDescription,
+        });
+        
+        console.log(`✅ Successfully processed offer from ${from}`);
+      } catch (error) {
+        console.error('❌ Error handling offer from', from, ':', error);
+      }
+    },
+    [socket]
+  );
+  // Handle incoming answer
+  const handleIncomingAnswer = useCallback(
+    async ({ from, answer }: { from: string; answer: RTCSessionDescriptionInit }) => {
+      const peerConnection = peerConnections.current[from];
+      if (!peerConnection) {
+        console.warn(`No peer connection found for ${from}`);
+        return;
+      }
+
+      if (!answer) {
+        console.error('Received null or undefined answer');
+        return;
+      }
+
+      try {
+        console.log(`📨 Received answer from ${from} in state ${peerConnection.signalingState}`);
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        console.log(`✅ Remote description (answer) set for ${from}`);
+      } catch (error) {
+        console.error('❌ Error handling answer from', from, ':', error);
+      }
+    },
+    []
+  );
+  
+  // Handle ICE candidate
+  const handleIceCandidate = useCallback(
+    ({ from, candidate }: { from: string; candidate: RTCIceCandidateInit }) => {
+      const peerConnection = peerConnections.current[from];
+      if (!peerConnection) return;
+      
+      try {
+        if (candidate) {
+          peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+      } catch (error) {
+        console.error('Error adding ICE candidate:', error);
+      }
+    },
+    []
+  );
+  
+  // Add system message
+  const addSystemMessage = (text: string) => {
+    const message: PublicRoomMessage = {
+      id: `system-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      sender: 'System',
+      senderId: `system-${Date.now()}`,
+      text,
+      timestamp: new Date(),
+      type: 'system',
+    };
+    
+    setMessages((prev) => [...prev, message]);
+  };
+  
+  // Send message to all peers
+  const sendMessage = (text: string) => {
+    if (!text.trim() || !socket) return;
+    
+    const message: PublicRoomMessage = {
+      id: `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      sender: userName,
+      senderId: socket.id || 'me',
+      text,
+      timestamp: new Date(),
+      type: 'text',
+    };
+    
+    // Add to local messages
+    setMessages((prev) => [...prev, message]);
+    
+    // Send message via socket.io to the server
+    socket.emit('send-public-message', {
+      roomId,
+      message: text
+    });
+  };
+  
+  // Toggle audio
+  const toggleAudio = () => {
+    if (!localStreamRef.current) return;
+    
+    const audioTracks = localStreamRef.current.getAudioTracks();
+    const newAudioState = !isAudioEnabled;
+    
+    audioTracks.forEach((track) => {
+      track.enabled = newAudioState;
+    });
+    
+    setIsAudioEnabled(newAudioState);
+    
+    // Update participant state
+    setParticipants((prev) =>
+      prev.map((p) =>
+        p.isMe ? { ...p, audioEnabled: newAudioState } : p
+      )
+    );
+    
+    // Notify other participants about audio state change
+    if (socket) {
+      socket.emit('media-state-change', {
+        roomId,
+        audioEnabled: newAudioState,
+        videoEnabled: isVideoEnabled
+      });
+    }
+  };
+  
+  // Toggle video
+  const toggleVideo = () => {
+    if (!localStreamRef.current) return;
+    
+    const videoTracks = localStreamRef.current.getVideoTracks();
+    const newVideoState = !isVideoEnabled;
+    
+    videoTracks.forEach((track) => {
+      track.enabled = newVideoState;
+    });
+    
+    setIsVideoEnabled(newVideoState);
+    
+    // Update participant state
+    setParticipants((prev) =>
+      prev.map((p) =>
+        p.isMe ? { ...p, videoEnabled: newVideoState } : p
+      )
+    );
+    
+    // Always keep local video element visible for local participant
+    if (localVideoRef.current && localStreamRef.current) {
+      localVideoRef.current.srcObject = localStreamRef.current;
+      // Force video to play again after track state change
+      localVideoRef.current.play().catch(err => {
+        console.error('Error playing local video after toggle:', err);
+      });
+    }
+    
+    // Notify other participants about video state change
+    if (socket) {
+      socket.emit('media-state-change', {
+        roomId,
+        audioEnabled: isAudioEnabled,
+        videoEnabled: newVideoState
+      });
+    }
+  };
+  
+  // Toggle screen share
+  const toggleScreenShare = async () => {
+    try {
+      if (isScreenSharing) {
+        // Stop screen sharing
+        if (screenShareRef.current) {
+          screenShareRef.current.getTracks().forEach((track) => track.stop());
+          screenShareRef.current = null;
+        }
+        
+        // Restore camera
+        if (localStreamRef.current) {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              frameRate: { ideal: 30 },
+            },
+          });
+          
+          // Replace video tracks
+          const videoTrack = stream.getVideoTracks()[0];
+          localStreamRef.current.getVideoTracks().forEach((track) => {
+            localStreamRef.current?.removeTrack(track);
+            track.stop();
+          });
+          
+          localStreamRef.current.addTrack(videoTrack);
+          
+          // Update all peer connections
+          Object.values(peerConnections.current).forEach((pc) => {
+            const senders = pc.getSenders();
+            const videoSender = senders.find((s) => s.track?.kind === 'video');
+            
+            if (videoSender) {
+              videoSender.replaceTrack(videoTrack);
+            }
+          });
+          
+          setLocalStream(new MediaStream(localStreamRef.current.getTracks()));
+        }
+        
+        setIsScreenSharing(false);
+      } else {
+        // Start screen sharing
+        const screenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: true,
+        });
+        
+        screenShareRef.current = screenStream;
+        
+        // Handle when screen sharing is stopped via browser UI
+        screenStream.getVideoTracks()[0].onended = () => {
+          toggleScreenShare();
+        };
+        
+        // Add audio if available
+        const audioTracks = screenStream.getAudioTracks();
+        if (audioTracks.length > 0) {
+          // If screen sharing includes audio, use it
+          localStreamRef.current?.getAudioTracks().forEach((track) => {
+            localStreamRef.current?.removeTrack(track);
+            track.stop();
+          });
+          
+          localStreamRef.current?.addTrack(audioTracks[0]);
+        }
+        
+        // Replace video track
+        const videoTrack = screenStream.getVideoTracks()[0];
+        localStreamRef.current?.getVideoTracks().forEach((track) => {
+          localStreamRef.current?.removeTrack(track);
+          track.stop();
+        });
+        
+        localStreamRef.current?.addTrack(videoTrack);
+        
+        // Update all peer connections
+        Object.values(peerConnections.current).forEach((pc) => {
+          const senders = pc.getSenders();
+          const videoSender = senders.find((s) => s.track?.kind === 'video');
+          
+          if (videoSender) {
+            videoSender.replaceTrack(videoTrack);
+          }
+        });
+        
+        setLocalStream(new MediaStream(localStreamRef.current?.getTracks() || []));
+        setIsScreenSharing(true);
+      }
+    } catch (error) {
+      console.error('Error toggling screen share:', error);
+      toast.error('Failed to share screen');
+    }
+  };
+  
+  // Leave room
+  const leaveRoom = () => {
+    // Close all peer connections
+    Object.values(peerConnections.current).forEach((pc) => {
+      pc.close();
+    });
+    
+    // Close all data channels
+    Object.values(dataChannels.current).forEach((dc) => {
+      dc.close();
+    });
+    
+    // Stop local media
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => track.stop());
+      localStreamRef.current = null;
+    }
+    
+    // Stop screen sharing if active
+    if (screenShareRef.current) {
+      screenShareRef.current.getTracks().forEach((track) => track.stop());
+      screenShareRef.current = null;
+    }
+    
+    // Emit leave event
+    if (socket) {
+      socket.emit('leave-public-room');
+    }
+    
+    // Reset state
+    setParticipants([]);
+    setMessages([]);
+    setIsConnected(false);
+    
+    // Navigate back
+    router.push('/public-rooms');
+  };
+  
+  // Toggle fullscreen
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(console.error);
+      setIsFullscreen(true);
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen().catch(console.error);
+        setIsFullscreen(false);
+      }
+    }
+  };
+  
+  // Handle fullscreen change
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+  
+  // Set up socket event listeners
+  useEffect(() => {
+    if (!socket) return;
+    
+    // Room events
+    socket.on('public-room-joined', (data: any) => {
+      setRoomInfo({
+        id: data.roomId,
+        name: data.name,
+        description: data.description,
+        createdBy: data.createdBy,
+        createdAt: new Date(),
+        maxParticipants: data.maxParticipants,
+      });
+      
+      setIsJoining(false);
+    });
+    
+    socket.on('public-room-info', (data: any) => {
+      setRoomInfo({
+        id: data.id,
+        name: data.name,
+        description: data.description,
+        createdBy: data.createdBy,
+        createdAt: new Date(data.createdAt),
+        maxParticipants: data.maxParticipants,
+      });
+    });
+    
+    socket.on('public-participant-joined', handleParticipantJoined);
+    socket.on('public-participant-left', handleParticipantLeft);
+    socket.on('public-existing-participants', handleExistingParticipants);
+    socket.on('public-chat-message', handleIncomingMessage);
+    
+    // Handle media state changes from other participants
+    socket.on('participant-media-state-changed', ({ participantId, audioEnabled, videoEnabled }: { participantId: string; audioEnabled: boolean; videoEnabled: boolean }) => {
+      console.log(`Participant ${participantId} media state changed: audio=${audioEnabled}, video=${videoEnabled}`);
+      setParticipants((prev) =>
+        prev.map((p) =>
+          p.id === participantId ? { ...p, audioEnabled, videoEnabled } : p
+        )
+      );
+    });
+    
+    // WebRTC events
+    socket.on('offer', handleIncomingOffer);
+    socket.on('answer', handleIncomingAnswer);
+    socket.on('ice-candidate', handleIceCandidate);
+    
+    // Handle errors
+    socket.on('error', (error: string) => {
+      toast.error(error);
+    });
+    
+    // Handle room full
+    socket.on('room-full', () => {
+      toast.error('Room is full');
+      router.push('/public-rooms');
+    });
+    
+    // Handle room not found
+    socket.on('room-not-found', () => {
+      toast.error('Room not found');
+      router.push('/public-rooms');
+    });
+    
+    // Clean up on unmount
+    return () => {
+      socket.off('public-room-joined');
+      socket.off('public-room-info');
+      socket.off('public-participant-joined');
+      socket.off('public-participant-left');
+      socket.off('public-existing-participants');
+      socket.off('public-chat-message');
+      socket.off('participant-media-state-changed');
+      socket.off('offer');
+      socket.off('answer');
+      socket.off('ice-candidate');
+      socket.off('error');
+      socket.off('room-full');
+      socket.off('room-not-found');
+      
+      // Leave room if still connected
+      if (isConnected) {
+        socket.emit('leave-public-room');
+      }
+    };
+  }, [
+    socket,
+    isConnected,
+    handleParticipantJoined,
+    handleParticipantLeft,
+    handleExistingParticipants,
+    handleIncomingMessage,
+    handleIncomingOffer,
+    handleIncomingAnswer,
+    handleIceCandidate,
+    router,
+  ]);
+  
+  // Set up media stream for local participant
+  useEffect(() => {
+    if (isConnected && localStreamRef.current) {
+      setParticipants((prev) =>
+        prev.map((p) =>
+          p.isMe ? { ...p, stream: localStreamRef.current! } : p
+        )
+      );
+    }
+  }, [isConnected]);
+  
+  // Handle before unload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (isConnected) {
+        socket?.emit('leave-public-room');
+      }
+    };
+    
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isConnected, socket]);
+  
+  // Render join form if not connected
+  if (!isConnected) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-background to-muted/20">
+        <Card className="w-full max-w-md glass-card">
+          <CardHeader>
+            <CardTitle className="text-2xl">Join Room</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Enter your name to join the room
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="name">Your Name</Label>
+                <Input
+                  id="name"
+                  value={userName}
+                  onChange={(e) => setUserName(e.target.value)}
+                  placeholder="Enter your name"
+                  className="mt-1"
+                  disabled={isJoining}
+                />
+              </div>
+              
+              <div className="flex gap-3 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => router.push('/public-rooms')}
+                  className="flex-1"
+                  disabled={isJoining}
+                >
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back
+                </Button>
+                <Button
+                  type="button"
+                  onClick={joinRoom}
+                  className="flex-1 bg-gradient-primary text-white"
+                  disabled={!userName.trim() || isJoining}
+                >
+                  {isJoining ? 'Joining...' : 'Join Room'}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+  
+  // Get local participant (current user)
+  const localParticipant = participants.find((p) => p.isMe);
+  const remoteParticipants = participants.filter((p) => !p.isMe);
+  
+  return (
+    <div className="flex flex-col h-screen bg-background">
+      {/* Header */}
+      <header className="border-b bg-card/50 backdrop-blur-sm z-10">
+        <div className="flex items-center justify-between p-4">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => router.push('/public-rooms')}
+              className="md:hidden"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            
+            <div>
+              <h1 className="font-semibold text-lg">{roomInfo?.name || 'Public Room'}</h1>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <Users className="h-3.5 w-3.5" />
+                  {participants.length} {participants.length === 1 ? 'participant' : 'participants'}
+                </span>
+                <span>•</span>
+                <span>{roomInfo?.description || 'No description'}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+            >
+              {isFullscreen ? (
+                <Minimize2 className="h-5 w-5" />
+              ) : (
+                <Maximize2 className="h-5 w-5" />
+              )}
+            </Button>
+            
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={leaveRoom}
+              className="gap-1.5"
+            >
+              <PhoneOff className="h-4 w-4" />
+              <span className="hidden sm:inline">Leave</span>
+            </Button>
+          </div>
+        </div>
+      </header>
+      
+      {/* Main content */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Main video area */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Video grid */}
+          <div className="flex-1 p-4 overflow-auto">
+            {remoteParticipants.length === 0 ? (
+              // No other participants yet
+              <div className="h-full flex items-center justify-center">
+                <div className="text-center max-w-md p-6 rounded-xl bg-muted/20">
+                  <Users className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                  <h3 className="font-medium text-lg mb-2">Waiting for others to join</h3>
+                  <p className="text-muted-foreground text-sm">
+                    Share the room link with others to start the conversation
+                  </p>
+                </div>
+              </div>
+            ) : (
+              // Video grid
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {remoteParticipants.map((participant) => (
+                  <ParticipantVideo
+                    key={participant.id}
+                    participant={participant}
+                    className="w-full"
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+          
+          {/* Local video and controls */}
+          <div className="border-t bg-card/50 backdrop-blur-sm p-4">
+            <div className="max-w-4xl mx-auto">
+              <div className="flex flex-col md:flex-row items-center gap-4">
+                {/* Local video */}
+                <div className="relative">
+                  <div className="w-40 h-24 rounded-lg overflow-hidden bg-muted/20 border border-border/20">
+                    <video
+                      ref={localVideoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className={cn(
+                        'w-full h-full object-cover',
+                        !localParticipant?.videoEnabled && 'opacity-0' // Hide video visually when disabled
+                      )}
+                    />
+                    {!localParticipant?.videoEnabled && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-muted/50">
+                        <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                          <Users className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Local user name */}
+                  <div className="absolute bottom-1 left-1 right-1 bg-black/60 text-white text-xs px-2 py-0.5 rounded truncate">
+                    {localParticipant?.name} (You)
+                  </div>
+                </div>
+                
+                {/* Controls */}
+                <div className="flex-1 flex items-center justify-center gap-2">
+                  <Button
+                    variant={isAudioEnabled ? 'default' : 'destructive'}
+                    size="icon"
+                    onClick={toggleAudio}
+                    className="rounded-full h-12 w-12"
+                  >
+                    {isAudioEnabled ? (
+                      <Mic className="h-5 w-5" />
+                    ) : (
+                      <MicOff className="h-5 w-5" />
+                    )}
+                  </Button>
+                  
+                  <Button
+                    variant={isVideoEnabled ? 'default' : 'destructive'}
+                    size="icon"
+                    onClick={toggleVideo}
+                    className="rounded-full h-12 w-12"
+                  >
+                    {isVideoEnabled ? (
+                      <Video className="h-5 w-5" />
+                    ) : (
+                      <VideoOff className="h-5 w-5" />
+                    )}
+                  </Button>
+                  
+                  <Button
+                    variant={isScreenSharing ? 'secondary' : 'outline'}
+                    size="icon"
+                    onClick={toggleScreenShare}
+                    className="rounded-full h-12 w-12"
+                  >
+                    {isScreenSharing ? (
+                      <ScreenShareOff className="h-5 w-5" />
+                    ) : (
+                      <ScreenShare className="h-5 w-5" />
+                    )}
+                  </Button>
+                  
+                  <Button
+                    variant={showChat ? 'secondary' : 'outline'}
+                    size="icon"
+                    onClick={() => setShowChat(!showChat)}
+                    className="rounded-full h-12 w-12 md:hidden"
+                  >
+                    <MessageSquare className="h-5 w-5" />
+                  </Button>
+                  
+                  <Button
+                    variant={showParticipants ? 'secondary' : 'outline'}
+                    size="icon"
+                    onClick={() => setShowParticipants(!showParticipants)}
+                    className="rounded-full h-12 w-12 md:hidden"
+                  >
+                    <Users className="h-5 w-5" />
+                  </Button>
+                  
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    onClick={leaveRoom}
+                    className="rounded-full h-12 w-12"
+                  >
+                    <PhoneOff className="h-5 w-5" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Sidebar */}
+        <div className="hidden md:flex flex-col w-80 border-l bg-card/50 backdrop-blur-sm">
+          {/* Tabs */}
+          <div className="flex border-b">
+            <button
+              className={`flex-1 py-3 text-sm font-medium text-center ${
+                showChat ? 'text-primary border-b-2 border-primary' : 'text-muted-foreground'
+              }`}
+              onClick={() => {
+                setShowChat(true);
+                setShowParticipants(false);
+              }}
+            >
+              Chat
+            </button>
+            <button
+              className={`flex-1 py-3 text-sm font-medium text-center ${
+                showParticipants ? 'text-primary border-b-2 border-primary' : 'text-muted-foreground'
+              }`}
+              onClick={() => {
+                setShowParticipants(true);
+                setShowChat(false);
+              }}
+            >
+              Participants ({participants.length})
+            </button>
+          </div>
+          
+          {/* Chat or participants list */}
+          <div className="flex-1 overflow-hidden">
+            {showChat ? (
+              <Chat messages={messages} onSendMessage={sendMessage} className="h-full" />
+            ) : (
+              <ParticipantsList participants={participants} className="h-full" />
+            )}
+          </div>
+        </div>
+        
+        {/* Mobile sidebar overlay */}
+        {(showChat || showParticipants) && (
+          <div className="fixed inset-0 z-50 md:hidden">
+            <div 
+              className="absolute inset-0 bg-black/50"
+              onClick={() => {
+                setShowChat(false);
+                setShowParticipants(false);
+              }}
+            />
+            
+            <div className="absolute right-0 top-0 bottom-0 w-4/5 max-w-sm bg-card shadow-lg">
+              <div className="h-full flex flex-col">
+                {/* Header */}
+                <div className="p-4 border-b flex items-center justify-between">
+                  <h3 className="font-medium">
+                    {showChat ? 'Chat' : `Participants (${participants.length})`}
+                  </h3>
+                  <button
+                    onClick={() => {
+                      setShowChat(false);
+                      setShowParticipants(false);
+                    }}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                
+                {/* Content */}
+                <div className="flex-1 overflow-auto">
+                  {showChat ? (
+                    <Chat messages={messages} onSendMessage={sendMessage} className="h-full border-0" />
+                  ) : (
+                    <ParticipantsList participants={participants} className="h-full border-0" />
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,78 @@
+{
+  "log": {
+    "level": "debug"
+  },
+  "client": {
+    "insecure": true,
+    "allowed_origins": [
+      "http://localhost:3000"
+    ],
+    "token": {
+      "hmac_secret_key": "a7d8f4b29cbd44890fe32fa7bcb99100"
+    }
+  },
+  "http_api": {
+    "enabled": true,
+    "insecure": true,
+    "key": "server_publish_key_998877"
+  },
+  "admin": {
+    "enabled": true,
+    "insecure": true,
+    "password": "Bb951357.",
+    "secret": "admin_secret_951357963147852"
+  },
+  "engine": {
+    "type": "memory"
+  },
+  "channel": {
+    "namespaces": [
+      {
+        "name": "user",
+        "presence": false,
+        "join_leave": false,
+        "history_size": 10,
+        "history_ttl": "2m"
+      },
+      {
+        "name": "session",
+        "presence": false,
+        "join_leave": false,
+        "history_size": 50,
+        "history_ttl": "5m"
+      },
+      {
+        "name": "room",
+        "presence": true,
+        "join_leave": true,
+        "history_size": 100,
+        "history_ttl": "10m",
+        "force_recovery": true
+      },
+      {
+        "name": "random",
+        "presence": true,
+        "join_leave": true,
+        "history_size": 100,
+        "history_ttl": "5m",
+        "force_recovery": true
+      },
+      {
+        "name": "group",
+        "presence": true,
+        "join_leave": true,
+        "history_size": 100,
+        "history_ttl": "5m",
+        "force_recovery": true
+      },
+      {
+        "name": "public",
+        "presence": true,
+        "join_leave": true,
+        "history_size": 100,
+        "history_ttl": "5m",
+        "force_recovery": true
+      }
+    ]
+  }
+}

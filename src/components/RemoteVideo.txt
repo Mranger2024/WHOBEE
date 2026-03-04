@@ -1,0 +1,37 @@
+import React, { useEffect, useRef } from 'react';
+
+interface RemoteVideoProps {
+  stream: MediaStream | undefined;
+  muted?: boolean;
+  className?: string;
+}
+
+export default function RemoteVideo({ 
+  stream, 
+  muted = false, 
+  className = "w-full h-full object-cover" 
+}: RemoteVideoProps) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+    }
+    
+    return () => {
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    };
+  }, [stream]);
+
+  return (
+    <video
+      ref={videoRef}
+      autoPlay
+      playsInline
+      muted={muted}
+      className={className}
+    />
+  );
+}
