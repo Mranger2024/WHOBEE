@@ -35,13 +35,6 @@ type CentrifugoContextType = {
     findTextMatch: () => Promise<any>;
     cancelTextMatch: () => Promise<any>;
 
-    // Room Management
-    getPublicRooms: () => Promise<any>;
-    createPublicRoom: (name: string, description: string, creatorName: string) => Promise<any>;
-
-    // Moderation
-    reportUser: (reportedUserId: string, reportedIp: string, reason: string) => Promise<any>;
-    checkBanStatus: (userId?: string, ip?: string) => Promise<any>;
 
     error: Error | null;
 };
@@ -175,23 +168,6 @@ export function CentrifugoProvider({ children }: { children: ReactNode }) {
         return await centrifugoClient.cancelTextMatch();
     }, []);
 
-    // Room Management
-    const getPublicRooms = useCallback(async () => {
-        return await centrifugoClient.getPublicRooms();
-    }, []);
-
-    const createPublicRoom = useCallback(async (name: string, description: string, creatorName: string) => {
-        return await centrifugoClient.createPublicRoom(name, description, creatorName);
-    }, []);
-
-    // Moderation
-    const reportUser = useCallback(async (reportedUserId: string, reportedIp: string, reason: string) => {
-        return await centrifugoClient.reportUser(reportedUserId, reportedIp, reason);
-    }, []);
-
-    const checkBanStatus = useCallback(async (userId?: string, ip?: string) => {
-        return await centrifugoClient.checkBanStatus(userId, ip);
-    }, []);
 
     const value = {
         isConnected,
@@ -213,10 +189,7 @@ export function CentrifugoProvider({ children }: { children: ReactNode }) {
         cancelVoiceMatch,
         findTextMatch,
         cancelTextMatch,
-        getPublicRooms,
-        createPublicRoom,
-        reportUser,
-        checkBanStatus,
+
         error,
     };
 

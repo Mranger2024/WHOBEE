@@ -307,50 +307,6 @@ class CentrifugeClient {
     return response.json();
   }
 
-  // Room Management Methods
-  async getPublicRooms(): Promise<any> {
-    const response = await fetch('/api/rooms/public');
-    return response.json();
-  }
-
-  async createPublicRoom(name: string, description: string, creatorName: string): Promise<any> {
-    const response = await fetch('/api/rooms/public', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name,
-        description,
-        creatorId: this.clientId,
-        creatorName,
-      }),
-    });
-    return response.json();
-  }
-
-  // Moderation Methods
-  async reportUser(reportedUserId: string, reportedIp: string, reason: string): Promise<any> {
-    const response = await fetch('/api/moderation/report', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        reportedUserId,
-        reportedBy: this.clientId,
-        reportedIp,
-        reason,
-      }),
-    });
-    return response.json();
-  }
-
-  async checkBanStatus(userId?: string, ip?: string): Promise<any> {
-    const params = new URLSearchParams();
-    if (userId) params.append('userId', userId);
-    if (ip) params.append('ip', ip);
-
-    const response = await fetch(`/api/moderation/report?${params.toString()}`);
-    return response.json();
-  }
-
   // Event emitter methods
   on(event: string, callback: EventCallback) {
     if (!this.eventCallbacks.has(event)) {

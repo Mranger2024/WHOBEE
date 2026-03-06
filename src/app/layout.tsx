@@ -2,10 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Orbitron } from "next/font/google";
 import "./globals.css";
 import { RealtimeProvider } from "@/context/RealtimeProvider";
-import { SupabaseProvider } from "@/context/SupabaseProvider";
 import { CentrifugoProvider } from "@/context/CentrifugoProvider";
-import { createServerComponentClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
 import { CSPostHogProvider } from '@/context/PostHogProvider';
 
 const geistSans = Geist({
@@ -83,13 +80,11 @@ export default function RootLayout({
           }}
         ></div>
         <CSPostHogProvider>
-          <SupabaseProvider>
-            <CentrifugoProvider>
-              <RealtimeProvider>
-                {children}
-              </RealtimeProvider>
-            </CentrifugoProvider>
-          </SupabaseProvider>
+          <CentrifugoProvider>
+            <RealtimeProvider>
+              {children}
+            </RealtimeProvider>
+          </CentrifugoProvider>
         </CSPostHogProvider>
       </body>
     </html>
