@@ -209,7 +209,7 @@ const RandomChatPage = () => {
         "Fashion", "Photography", "Coding", "Anime"
     ];
 
-    const channel = 'random:matching';
+    const channel = 'random_matching';
 
     // Attach streams to HTML video immediately upon stream change or UI remount
     useEffect(() => {
@@ -1286,14 +1286,14 @@ const RandomChatPage = () => {
             {/* Note: ConnectionPopup removed in favor of in-video animation */}
 
             {!isSearching && !isConnectedToPartner && (
-                <div className="min-h-screen flex items-center justify-center pt-24 px-4">
+                <div className="fixed inset-0 z-[100] flex items-center justify-center pt-24 px-4 bg-slate-900/40 backdrop-blur-md">
                     {isLoadingPrefs ? (
-                        <div className="flex flex-col items-center gap-4">
+                        <div className="flex flex-col items-center gap-4 bg-white p-8 rounded-3xl shadow-2xl">
                             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
                             <p className="text-gray-500 font-medium">Loading preferences...</p>
                         </div>
                     ) : (
-                        <div className="w-full max-w-xl mx-auto rounded-3xl shadow-2xl bg-white/70 backdrop-blur-xl border border-white/50">
+                        <div className="w-full max-w-xl mx-auto rounded-3xl shadow-2xl bg-white backdrop-blur-xl border border-white/50">
                             <div className="p-10 text-center">
                                 <div className="h-24 w-24 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-xl mx-auto mb-8 animate-float">
                                     <Users className="h-10 w-10 text-white" />

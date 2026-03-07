@@ -81,7 +81,7 @@ const VoiceChatPage = () => {
     peer.peer.ontrack = (ev) => { const [stream] = ev.streams; setRemoteStream(stream); };
     peer.peer.onicecandidate = (ev) => {
       if (ev.candidate && sessionId) {
-        publish(`session:${sessionId}`, { type: 'ice-candidate', from: clientId, candidate: ev.candidate });
+        publish(`session_${sessionId}`, { type: 'ice-candidate', from: clientId, candidate: ev.candidate });
       }
     };
   }, [sessionId, clientId, publish]);
@@ -142,13 +142,13 @@ const VoiceChatPage = () => {
           case 'ice-candidate': handleIceCandidate(sigData); break;
         }
       };
-      const unsubscribe = subscribe(`session:${data.sessionId}`, handleSignaling);
+      const unsubscribe = subscribe(`session_${data.sessionId}`, handleSignaling);
       sessionSubscriptionRef.current = unsubscribe;
       if (clientId && data.partnerId && clientId < data.partnerId) {
         setTimeout(async () => {
           try {
             const offer = await peer.getOffer();
-            if (offer) await publish(`session:${data.sessionId}`, { type: 'offer', from: clientId, offer });
+            if (offer) await publish(`session_${data.sessionId}`, { type: 'offer', from: clientId, offer });
           } catch (e) { console.error(e); }
         }, 1000);
       }
@@ -161,7 +161,7 @@ const VoiceChatPage = () => {
     const answer = await peer.getAnswer(data.offer);
     await processPendingIceCandidates();
     if (answer && activeSessionId) {
-      await publish(`session:${activeSessionId}`, { type: 'answer', from: clientId, answer });
+      await publish(`session_${activeSessionId}`, { type: 'answer', from: clientId, answer });
     }
   }, [sessionId, clientId, publish, processPendingIceCandidates]);
 
@@ -179,7 +179,7 @@ const VoiceChatPage = () => {
 
   useEffect(() => {
     if (!isConnected || !clientId) return;
-    const unsubscribe = subscribe(`user:${clientId}`, (data: any) => {
+    const unsubscribe = subscribe(`user_${clientId}`, (data: any) => {
       if (data.type === 'voice-match-found') handleVoiceMatchFound(data);
     });
     return () => unsubscribe();
@@ -273,30 +273,34 @@ const VoiceChatPage = () => {
 
           {/* Idle state */}
           {!connected && !searching && (
-            <div className="bg-white/70 backdrop-blur-xl rounded-3xl shadow-2xl shadow-purple-500/10 border border-white/50 p-10 text-center">
-              <div className="relative mb-8 inline-block">
-                <div className="h-24 w-24 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-2xl shadow-purple-500/30 mx-auto">
-                  <Mic className="h-12 w-12 text-white" />
+            <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 bg-slate-900/40 backdrop-blur-md">
+              <div className="w-full max-w-md">
+                <div className="bg-white backdrop-blur-xl rounded-3xl shadow-2xl shadow-purple-500/20 border border-white/50 p-10 text-center">
+                  <div className="relative mb-8 inline-block">
+                    <div className="h-24 w-24 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-2xl shadow-purple-500/30 mx-auto">
+                      <Mic className="h-12 w-12 text-white" />
+                    </div>
+                    <div className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-md">
+                      <Sparkles className="h-5 w-5 text-purple-500 animate-pulse" />
+                    </div>
+                  </div>
+                  <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-pink-600 mb-3">
+                    Voice Chat
+                  </h1>
+                  <p className="text-slate-600 mb-8 leading-relaxed">
+                    Connect voice-only with a random stranger. No camera needed — just your voice.
+                  </p>
+                  <button
+                    onClick={startVoiceChat}
+                    className="w-full py-4 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-2xl font-bold text-lg shadow-xl shadow-purple-500/25 hover:shadow-purple-500/40 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center gap-2"
+                  >
+                    <Mic className="h-5 w-5" /> Start Voice Chat
+                  </button>
+                  <div className="mt-6 flex items-center justify-center gap-2 text-xs text-slate-500">
+                    <Shield className="h-3.5 w-3.5 text-emerald-500" />
+                    Anonymous · No sign-up · Free
+                  </div>
                 </div>
-                <div className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-md">
-                  <Sparkles className="h-5 w-5 text-purple-500 animate-pulse" />
-                </div>
-              </div>
-              <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-pink-600 mb-3">
-                Voice Chat
-              </h1>
-              <p className="text-slate-600 mb-8 leading-relaxed">
-                Connect voice-only with a random stranger. No camera needed — just your voice.
-              </p>
-              <button
-                onClick={startVoiceChat}
-                className="w-full py-4 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-2xl font-bold text-lg shadow-xl shadow-purple-500/25 hover:shadow-purple-500/40 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center gap-2"
-              >
-                <Mic className="h-5 w-5" /> Start Voice Chat
-              </button>
-              <div className="mt-6 flex items-center justify-center gap-2 text-xs text-slate-500">
-                <Shield className="h-3.5 w-3.5 text-emerald-500" />
-                Anonymous · No sign-up · Free
               </div>
             </div>
           )}

@@ -186,7 +186,7 @@ export async function POST(req: Request) {
             if (removeResult === 1) {
                 const roomId = `rand-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-                await publishToCentrifugo("random:matching", {
+                await publishToCentrifugo("random_matching", {
                     type: "match_found",
                     roomId,
                     clientA: partner.clientId,
@@ -218,7 +218,7 @@ export async function POST(req: Request) {
             if (removeResult === 1) {
                 const roomId = `rand-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-                await publishToCentrifugo("random:matching", {
+                await publishToCentrifugo("random_matching", {
                     type: "match_found",
                     roomId,
                     clientA: partner.clientId,
@@ -248,7 +248,7 @@ export async function POST(req: Request) {
         // Get updated queue size
         const currentQueueSize = await redis.hlen(REDIS_HASH_KEY);
 
-        await publishToCentrifugo("random:matching", {
+        await publishToCentrifugo("random_matching", {
             type: "waiting",
             clientId,
             queueSize: currentQueueSize

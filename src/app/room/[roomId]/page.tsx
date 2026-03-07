@@ -60,7 +60,7 @@ const RoomPage = () => {
     const [remoteUserProfile, setRemoteUserProfile] = useState<RemoteUserProfile | null>(null);
     const [hasAnswered, setHasAnswered] = useState(false);
 
-    const channel = `room:${roomId}`;
+    const channel = `room_${roomId}`;
 
     // Function to share profile info with remote peer
     const shareProfileInfo = useCallback(() => {

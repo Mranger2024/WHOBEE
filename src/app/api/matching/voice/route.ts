@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
                     'Authorization': `apikey ${CENTRIFUGO_API_KEY}`
                 },
                 body: JSON.stringify({
-                    channel: `user:${userId}`,
+                    channel: `user_${userId}`,
                     data: {
                         type: 'voice-match-found',
                         sessionId: session.sessionId,
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
                     'Authorization': `apikey ${CENTRIFUGO_API_KEY}`
                 },
                 body: JSON.stringify({
-                    channel: `user:${matchedUserId}`,
+                    channel: `user_${matchedUserId}`,
                     data: {
                         type: 'voice-match-found',
                         sessionId: session.sessionId,

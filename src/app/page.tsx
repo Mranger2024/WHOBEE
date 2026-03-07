@@ -206,7 +206,7 @@ export default function Home() {
             </nav>
 
             {/* HERO */}
-            <section className="relative  pt-22 pb-28 lg:pt-36 lg:pb-40 overflow-hidden">
+            <section className="relative pt-32 pb-28 lg:pt-36 lg:pb-34 overflow-hidden">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
                     <div className="text-center">
 

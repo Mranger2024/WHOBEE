@@ -222,7 +222,7 @@ class CentrifugeClient {
 
   // Presence Methods
   async joinRoom(roomId: string, userName: string, namespace: string = 'room') {
-    const channel = `${namespace}:${roomId}`;
+    const channel = `${namespace}_${roomId}`;
     await this.publish(channel, {
       type: 'user-joined',
       userId: this.clientId,
@@ -232,7 +232,7 @@ class CentrifugeClient {
   }
 
   async leaveRoom(roomId: string, namespace: string = 'room') {
-    const channel = `${namespace}:${roomId}`;
+    const channel = `${namespace}_${roomId}`;
     await this.publish(channel, {
       type: 'user-left',
       userId: this.clientId,

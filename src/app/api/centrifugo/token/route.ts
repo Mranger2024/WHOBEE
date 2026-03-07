@@ -17,8 +17,7 @@ export async function GET(request: Request) {
     }
 
     const token = await new SignJWT({
-      sub: userId,
-      channels: [`user:${userId}`] // Only authorize personal channel
+      sub: userId
     })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()

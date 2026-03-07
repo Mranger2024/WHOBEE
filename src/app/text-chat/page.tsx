@@ -97,7 +97,7 @@ const TextChatPage = () => {
     const sendMessage = useCallback(() => {
         if (!inputMessage.trim() || !sessionId || !remotePeerId) return;
         setMessages(prev => [...prev, { id: Date.now().toString(), text: inputMessage.trim(), sender: 'me', timestamp: new Date() }]);
-        publish(`session:${sessionId}`, { type: 'text-message', text: inputMessage.trim(), from: clientId, to: remotePeerId });
+        publish(`session_${sessionId}`, { type: 'text-message', text: inputMessage.trim(), from: clientId, to: remotePeerId });
         setInputMessage(""); sendTypingIndicator(false);
     }, [inputMessage, sessionId, remotePeerId, clientId, publish, sendTypingIndicator]);
 
@@ -121,7 +121,7 @@ const TextChatPage = () => {
 
     useEffect(() => {
         if (!isConnected || !clientId) return;
-        const unsub = subscribe(`user:${clientId}`, (data: any) => handleMatchFound(data));
+        const unsub = subscribe(`user_${clientId}`, (data: any) => handleMatchFound(data));
         return () => unsub();
     }, [isConnected, clientId, subscribe, handleMatchFound]);
 
@@ -182,31 +182,33 @@ const TextChatPage = () => {
                 <div className="flex-1 flex items-center justify-center w-full">
                     {/* Idle */}
                     {!isSearching && !isConnectedToPartner && (
-                        <div className="w-full max-w-md">
-                            <div className="bg-white/70 backdrop-blur-xl rounded-3xl shadow-2xl shadow-purple-500/10 border border-white/50 p-10 text-center">
-                                <div className="relative mb-8 inline-block">
-                                    <div className="h-24 w-24 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-2xl shadow-purple-500/30 mx-auto">
-                                        <MessageSquare className="h-12 w-12 text-white" />
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 bg-slate-900/40 backdrop-blur-md">
+                            <div className="w-full max-w-md">
+                                <div className="bg-white backdrop-blur-xl rounded-3xl shadow-2xl shadow-purple-500/20 border border-white/50 p-10 text-center">
+                                    <div className="relative mb-8 inline-block">
+                                        <div className="h-24 w-24 rounded-2xl bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-2xl shadow-purple-500/30 mx-auto">
+                                            <MessageSquare className="h-12 w-12 text-white" />
+                                        </div>
+                                        <div className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-md">
+                                            <Sparkles className="h-5 w-5 text-purple-500 animate-pulse" />
+                                        </div>
                                     </div>
-                                    <div className="absolute -top-2 -right-2 bg-white rounded-full p-1 shadow-md">
-                                        <Sparkles className="h-5 w-5 text-purple-500 animate-pulse" />
+                                    <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-pink-600 mb-3">
+                                        Text Chat
+                                    </h1>
+                                    <p className="text-slate-600 mb-8 leading-relaxed">
+                                        Chat anonymously with a random stranger — no camera, no mic, just words.
+                                    </p>
+                                    <button
+                                        onClick={startTextChat}
+                                        className="w-full py-4 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-2xl font-bold text-lg shadow-xl shadow-purple-500/25 hover:shadow-purple-500/40 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center gap-2"
+                                    >
+                                        <Sparkles className="h-5 w-5" /> Find a Stranger
+                                    </button>
+                                    <div className="mt-6 flex items-center justify-center gap-2 text-xs text-slate-500">
+                                        <Shield className="h-3.5 w-3.5 text-emerald-500" />
+                                        Anonymous · No sign-up · Free
                                     </div>
-                                </div>
-                                <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-pink-600 mb-3">
-                                    Text Chat
-                                </h1>
-                                <p className="text-slate-600 mb-8 leading-relaxed">
-                                    Chat anonymously with a random stranger — no camera, no mic, just words.
-                                </p>
-                                <button
-                                    onClick={startTextChat}
-                                    className="w-full py-4 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 text-white rounded-2xl font-bold text-lg shadow-xl shadow-purple-500/25 hover:shadow-purple-500/40 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center gap-2"
-                                >
-                                    <Sparkles className="h-5 w-5" /> Find a Stranger
-                                </button>
-                                <div className="mt-6 flex items-center justify-center gap-2 text-xs text-slate-500">
-                                    <Shield className="h-3.5 w-3.5 text-emerald-500" />
-                                    Anonymous · No sign-up · Free
                                 </div>
                             </div>
                         </div>

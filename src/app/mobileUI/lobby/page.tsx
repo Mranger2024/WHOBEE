@@ -37,7 +37,7 @@ function LobbyContent() {
         const statusTimer = setInterval(() => { i = (i + 1) % statusMessages.length; setSearchStatus(statusMessages[i]); }, 2000);
         const startMatch = async () => { try { await cfg.find(); } catch (e) { console.error(e); } };
         startMatch();
-        const unsub = subscribe(`match:${clientId}`, (data: any) => {
+        const unsub = subscribe(`match_${clientId}`, (data: any) => {
             if (data.type === 'matched' || data.sessionId || data.peerId) {
                 clearInterval(statusTimer);
                 setMatchFound(true);

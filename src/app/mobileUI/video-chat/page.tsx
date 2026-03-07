@@ -58,7 +58,7 @@ export default function MobileVideoChatPage() {
     // Match subscription
     useEffect(() => {
         if (!clientId) return;
-        const unsub = subscribe(`match:${clientId}`, (data: any) => {
+        const unsub = subscribe(`match_${clientId}`, (data: any) => {
             if (data.sessionId) { setSessionId(data.sessionId); setIsConnectedToPartner(true); }
         });
         return unsub;
