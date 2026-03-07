@@ -32,7 +32,7 @@ async function publishToCentrifugo(channel: string, data: any) {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
-            "X-API-Key": apiKey,
+            "Authorization": `apikey ${apiKey}`,
         },
         body: JSON.stringify({
             method: "publish",
