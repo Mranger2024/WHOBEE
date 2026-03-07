@@ -40,8 +40,8 @@ export async function POST(request: NextRequest) {
             const session = await sessionManager.createSession(userId, matchedUserId);
 
             // Publish to Centrifugo HTTP API directly (server-side)
-            const CENTRIFUGO_API_URL = 'http://localhost:8000/api/publish';
-            const CENTRIFUGO_API_KEY = 'server_publish_key_998877';
+            const CENTRIFUGO_API_URL = process.env.CENTRIFUGO_API_URL || 'http://localhost:8000/api';
+            const CENTRIFUGO_API_KEY = process.env.CENTRIFUGO_API_KEY || '';
 
             // Notify both users via their personal channels
             await fetch(CENTRIFUGO_API_URL, {
@@ -51,11 +51,14 @@ export async function POST(request: NextRequest) {
                     'Authorization': `apikey ${CENTRIFUGO_API_KEY}`
                 },
                 body: JSON.stringify({
-                    channel: `user_${userId}`,
-                    data: {
-                        type: 'text-match-found',
-                        sessionId: session.sessionId,
-                        partnerId: matchedUserId
+                    method: 'publish',
+                    params: {
+                        channel: `user_${userId}`,
+                        data: {
+                            type: 'text-match-found',
+                            sessionId: session.sessionId,
+                            partnerId: matchedUserId
+                        }
                     }
                 })
             });
@@ -67,11 +70,14 @@ export async function POST(request: NextRequest) {
                     'Authorization': `apikey ${CENTRIFUGO_API_KEY}`
                 },
                 body: JSON.stringify({
-                    channel: `user_${matchedUserId}`,
-                    data: {
-                        type: 'text-match-found',
-                        sessionId: session.sessionId,
-                        partnerId: userId
+                    method: 'publish',
+                    params: {
+                        channel: `user_${matchedUserId}`,
+                        data: {
+                            type: 'text-match-found',
+                            sessionId: session.sessionId,
+                            partnerId: userId
+                        }
                     }
                 })
             });

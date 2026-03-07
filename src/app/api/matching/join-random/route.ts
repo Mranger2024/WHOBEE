@@ -25,8 +25,8 @@ const REDIS_HASH_KEY = 'random_waiting_users_prefs';
 
 // Helper to publish messages into Centrifugo
 async function publishToCentrifugo(channel: string, data: any) {
-    const apiUrl = process.env.CENTRIFUGO_HTTP_API_URL || "http://localhost:8000/api";
-    const apiKey = process.env.CENTRIFUGO_API_KEY || "server_publish_key_998877";
+    const apiUrl = process.env.CENTRIFUGO_API_URL || "http://localhost:8000/api";
+    const apiKey = process.env.CENTRIFUGO_API_KEY || "";
 
     const res = await fetch(apiUrl, {
         method: "POST",
