@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { MatchingQueue, redis } from '@/lib/redis';
 import { VoiceSessionManager } from '@/lib/session';
+import { Ratelimit } from '@upstash/ratelimit';
+
+// Initialize a rate limiter: 10 requests per 10 seconds per IP
+const ratelimit = new Ratelimit({
+    redis: redis,
+    limiter: Ratelimit.slidingWindow(10, '10 s'),
+    analytics: true,
+    prefix: '@upstash/ratelimit/matchmaking',
+});
 
 export async function POST(request: NextRequest) {
     console.log('=== Voice Matching API Called ===');
@@ -9,6 +18,17 @@ export async function POST(request: NextRequest) {
         console.log('User ID:', userId);
 
         const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || '127.0.0.1';
+
+        // 🚨 Rate Limit Check 🚨
+        const { success } = await ratelimit.limit(ip);
+        if (!success) {
+            console.warn(`[RateLimit] Blocked voice matchmaking request from IP: ${ip}`);
+            return NextResponse.json(
+                { error: "Too many matchmaking requests. Please wait a moment." },
+                { status: 429 }
+            );
+        }
+
         await redis.setex(`user_ip:${userId}`, 86400, ip);
 
         if (!userId) {

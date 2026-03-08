@@ -2,14 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { VoiceSessionManager } from '@/lib/session';
 import { SignJWT } from 'jose';
 
-const SECRET = process.env.CENTRIFUGO_TOKEN_HMAC_SECRET_KEY || 'a7d8f4b29cbd44890fe32fa7bcb99100';
+// 🔒 SECURITY: Never use a hardcoded fallback — if the env var is missing, fail explicitly
+const SECRET = process.env.CENTRIFUGO_TOKEN_HMAC_SECRET_KEY;
 
 export async function POST(request: NextRequest) {
-    console.log('=== Session Token API Called ===');
+    if (!SECRET) {
+        console.error('[session-token] CENTRIFUGO_TOKEN_HMAC_SECRET_KEY is not set!');
+        return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+    }
+
     try {
         const { sessionId, userId } = await request.json();
-        console.log('Session ID:', sessionId);
-        console.log('User ID:', userId);
 
         if (!sessionId || !userId) {
             return NextResponse.json(
@@ -18,13 +21,10 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        console.log('Creating VoiceSessionManager...');
         const sessionManager = new VoiceSessionManager();
 
         // Verify session exists and user is participant
-        console.log('Checking if user is participant...');
         const isParticipant = await sessionManager.isParticipant(sessionId, userId);
-        console.log('Is participant:', isParticipant);
 
         if (!isParticipant) {
             return NextResponse.json(
@@ -46,13 +46,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ token });
     } catch (error) {
         console.error('Session token error:', error);
-        console.error('Error details:', error instanceof Error ? error.message : String(error));
-        console.error('Error stack:', error instanceof Error ? error.stack : 'No stack');
         return NextResponse.json(
-            {
-                error: 'Failed to generate session token',
-                details: error instanceof Error ? error.message : String(error)
-            },
+            { error: 'Failed to generate session token' },
             { status: 500 }
         );
     }

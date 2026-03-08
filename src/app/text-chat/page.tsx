@@ -8,6 +8,7 @@ import Link from "next/link";
 import confetti from 'canvas-confetti';
 import Logo from '@/components/Logo';
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { generateE2EKeyPair, exportPublicKey, importPublicKey, deriveSharedSecret, encryptMessage, decryptMessage, EncryptedPayload } from '@/lib/encryption';
 import "@/app/globals.css";
 
 interface Message {
@@ -28,10 +29,13 @@ const TextChatPage = () => {
     const [inputMessage, setInputMessage] = useState("");
     const [reportStatus, setReportStatus] = useState<{ success?: boolean; message?: string } | null>(null);
     const [isTyping, setIsTyping] = useState(false);
+    const [isSecure, setIsSecure] = useState(false);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const myKeyPairRef = useRef<CryptoKeyPair | null>(null);
+    const sharedSecretRef = useRef<CryptoKey | null>(null);
 
     useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
     useEffect(() => {
@@ -57,28 +61,72 @@ const TextChatPage = () => {
         }
     }, [findTextMatch]);
 
-    const handleMatchFound = useCallback((data: any) => {
+    const handleMatchFound = useCallback(async (data: any) => {
         if (data.type !== 'text-match-found') return;
         setRemotePeerId(data.partnerId); setSessionId(data.sessionId);
         setIsSearching(false); setIsConnectedToPartner(true);
-        setMessages([{ id: Date.now().toString(), text: "You're now chatting with a random stranger. Say hi! 👋", sender: 'me', timestamp: new Date() }]);
-    }, []);
+        setMessages([{ id: Date.now().toString(), text: "You're now connected with a random stranger. Say hi! 👋", sender: 'me', timestamp: new Date() }]);
+
+        // 🔒 Generate an ephemeral E2E keypair uniquely for this session
+        try {
+            const keys = await generateE2EKeyPair();
+            myKeyPairRef.current = keys;
+            const pubJwk = await exportPublicKey(keys.publicKey);
+
+            // Publish our public key so they can derive the AES shared secret
+            publish(`session:${data.sessionId}`, {
+                type: 'public-key',
+                key: pubJwk,
+                from: clientId
+            });
+        } catch (error) {
+            console.error('Error generating crypto keys', error);
+        }
+    }, [clientId, publish]);
 
     const endCurrentChat = useCallback(async () => {
         if (sessionId) publish(`session:${sessionId}`, { type: 'partner-disconnected', from: clientId });
         await cancelTextMatch();
         setRemotePeerId(null); setSessionId(null); setIsConnectedToPartner(false);
         setIsSearching(false); setMessages([]); setIsTyping(false);
+        setIsSecure(false);
+        myKeyPairRef.current = null;
+        sharedSecretRef.current = null;
     }, [sessionId, clientId, publish, cancelTextMatch]);
 
-    const handleIncomingMessage = useCallback((data: any) => {
+    const handleIncomingMessage = useCallback(async (data: any) => {
         if (data.type === 'text-message' && data.from !== clientId) {
-            setMessages(prev => [...prev, { id: Date.now().toString(), text: data.text, sender: 'stranger', timestamp: new Date() }]);
+            let messageText = data.text;
+            // 🔒 Decrypt if E2E is active
+            if (data.encrypted && sharedSecretRef.current) {
+                try {
+                    messageText = await decryptMessage(sharedSecretRef.current, { iv: data.iv, data: data.encryptedData });
+                } catch (e) {
+                    console.error('E2E Decryption failed', e);
+                    messageText = "🔒 [Message corrupted or could not be decrypted]";
+                }
+            }
+            setMessages(prev => [...prev, { id: Date.now().toString(), text: messageText, sender: 'stranger', timestamp: new Date() }]);
             setIsTyping(false);
+        } else if (data.type === 'public-key' && data.from !== clientId) {
+            // 🔒 Received partner's public key. Derive the matching AES shared secret
+            if (myKeyPairRef.current) {
+                try {
+                    const partnerPublicKey = await importPublicKey(data.key);
+                    const sharedSecret = await deriveSharedSecret(myKeyPairRef.current.privateKey, partnerPublicKey);
+                    sharedSecretRef.current = sharedSecret;
+                    setIsSecure(true);
+
+                    // Add a system notice directly into the chat
+                    setMessages(prev => [...prev, { id: 'sys-secure-' + Date.now(), text: "🔒 This chat is now secured with End-to-End Encryption. Nobody, not even the server, can read your messages.", sender: 'me', timestamp: new Date() }]);
+                } catch (e) {
+                    console.error('Failed to establish E2E connection', e);
+                }
+            }
         } else if (data.type === 'typing-indicator' && data.from !== clientId) {
             setIsTyping(data.isTyping);
         } else if (data.type === 'partner-disconnected') {
-            setMessages(prev => [...prev, { id: Date.now().toString(), text: "Stranger has disconnected. 👋", sender: 'stranger', timestamp: new Date() }]);
+            setMessages(prev => [...prev, { id: 'sys-end-' + Date.now(), text: "Stranger has disconnected. 👋", sender: 'stranger', timestamp: new Date() }]);
             setTimeout(() => endCurrentChat(), 2000);
         }
     }, [clientId, endCurrentChat]);
@@ -94,12 +142,34 @@ const TextChatPage = () => {
         typingTimeoutRef.current = setTimeout(() => sendTypingIndicator(false), 1000);
     }, [sendTypingIndicator]);
 
-    const sendMessage = useCallback(() => {
-        if (!inputMessage.trim() || !sessionId || !remotePeerId) return;
-        setMessages(prev => [...prev, { id: Date.now().toString(), text: inputMessage.trim(), sender: 'me', timestamp: new Date() }]);
-        publish(`session_${sessionId}`, { type: 'text-message', text: inputMessage.trim(), from: clientId, to: remotePeerId });
+    const sendMessage = useCallback(async () => {
+        const textToPublish = inputMessage.trim();
+        if (!textToPublish || !sessionId || !remotePeerId) return;
+        setMessages(prev => [...prev, { id: Date.now().toString(), text: textToPublish, sender: 'me', timestamp: new Date() }]);
         setInputMessage(""); sendTypingIndicator(false);
-    }, [inputMessage, sessionId, remotePeerId, clientId, publish, sendTypingIndicator]);
+
+        let publishPayload: any = { type: 'text-message', text: textToPublish, from: clientId, to: remotePeerId };
+
+        // 🔒 Encrypt the message text specifically, discarding plaintext if secure
+        if (isSecure && sharedSecretRef.current) {
+            try {
+                const encrypted = await encryptMessage(sharedSecretRef.current, textToPublish);
+                publishPayload = {
+                    type: 'text-message',
+                    encrypted: true,
+                    iv: encrypted.iv,
+                    encryptedData: encrypted.data,
+                    from: clientId,
+                    to: remotePeerId
+                };
+            } catch (e) {
+                console.error("Encryption failed, falling back to plaintext or aborting", e);
+                return;
+            }
+        }
+
+        publish(`session_${sessionId}`, publishPayload);
+    }, [inputMessage, sessionId, remotePeerId, clientId, publish, sendTypingIndicator, isSecure]);
 
     const handleKeyPress = useCallback((e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -247,8 +317,13 @@ const TextChatPage = () => {
                                         <span className="text-white text-sm font-bold">?</span>
                                     </div>
                                     <div>
-                                        <div className="text-sm font-bold text-slate-800">Anonymous Stranger</div>
-                                        <div className="text-xs text-slate-400">End-to-end anonymous</div>
+                                        <div className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                                            Anonymous Stranger
+                                            {isSecure && <span title="End-to-End Encrypted"><ShieldCheck className="h-4 w-4 text-emerald-500" /></span>}
+                                        </div>
+                                        <div className="text-xs text-slate-400">
+                                            {isSecure ? <span className="text-emerald-600 font-medium">End-to-end Encrypted 🔒</span> : 'Establishing encryption...'}
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2">

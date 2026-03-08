@@ -1,5 +1,14 @@
 import { NextResponse } from "next/server";
 import { redis } from '@/lib/redis';
+import { Ratelimit } from '@upstash/ratelimit';
+
+// Initialize a rate limiter: 10 requests per 10 seconds per IP
+const ratelimit = new Ratelimit({
+    redis: redis,
+    limiter: Ratelimit.slidingWindow(10, '10 s'),
+    analytics: true,
+    prefix: '@upstash/ratelimit/matchmaking',
+});
 
 type UserPreferences = {
     gender: "male" | "female" | "other";
@@ -116,6 +125,16 @@ export async function POST(req: Request) {
 
         const clientId = body.clientId;
         const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '127.0.0.1';
+
+        // 🚨 Rate Limit Check 🚨
+        const { success } = await ratelimit.limit(ip);
+        if (!success) {
+            console.warn(`[RateLimit] Blocked matchmaking request from IP: ${ip}`);
+            return NextResponse.json(
+                { error: "Too many matchmaking requests. Please wait a moment." },
+                { status: 429 }
+            );
+        }
 
         // Save IP address for reporting system
         await redis.setex(`user_ip:${clientId}`, 86400, ip);
