@@ -61,46 +61,39 @@ export async function POST(request: NextRequest) {
             const session = await sessionManager.createSession(userId, matchedUserId);
 
             // Publish to Centrifugo HTTP API directly (server-side)
-            const CENTRIFUGO_API_URL = process.env.CENTRIFUGO_API_URL || 'http://localhost:8000/api';
+            const CENTRIFUGO_API_URL = process.env.CENTRIFUGO_API_URL || 'http://127.0.0.1:8000/api';
             const CENTRIFUGO_API_KEY = process.env.CENTRIFUGO_API_KEY || '';
 
+            const publishToCentrifugo = async (channel: string, data: any) => {
+                const res = await fetch(CENTRIFUGO_API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `apikey ${CENTRIFUGO_API_KEY}`
+                    },
+                    body: JSON.stringify({
+                        method: 'publish',
+                        params: { channel, data }
+                    })
+                });
+                if (!res.ok) {
+                    const text = await res.text();
+                    console.error("Centrifugo publish error on channel " + channel + ":", text);
+                    throw new Error("centrifugo_publish_failed");
+                }
+            };
+
             // Notify both users via their personal channels
-            await fetch(CENTRIFUGO_API_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `apikey ${CENTRIFUGO_API_KEY}`
-                },
-                body: JSON.stringify({
-                    method: 'publish',
-                    params: {
-                        channel: `user_${userId}`,
-                        data: {
-                            type: 'voice-match-found',
-                            sessionId: session.sessionId,
-                            partnerId: matchedUserId
-                        }
-                    }
-                })
+            await publishToCentrifugo(`user_${userId}`, {
+                type: 'voice-match-found',
+                sessionId: session.sessionId,
+                partnerId: matchedUserId
             });
 
-            await fetch(CENTRIFUGO_API_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `apikey ${CENTRIFUGO_API_KEY}`
-                },
-                body: JSON.stringify({
-                    method: 'publish',
-                    params: {
-                        channel: `user_${matchedUserId}`,
-                        data: {
-                            type: 'voice-match-found',
-                            sessionId: session.sessionId,
-                            partnerId: userId
-                        }
-                    }
-                })
+            await publishToCentrifugo(`user_${matchedUserId}`, {
+                type: 'voice-match-found',
+                sessionId: session.sessionId,
+                partnerId: userId
             });
 
             return NextResponse.json({
