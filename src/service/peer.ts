@@ -65,12 +65,10 @@ class PeerService {
 
     this.peer = new RTCPeerConnection({
       iceServers,
-      // Use max-bundle for better performance and compatibility
       bundlePolicy: 'max-bundle',
-      // Configure RTC settings for better compatibility
       rtcpMuxPolicy: 'require',
-      iceCandidatePoolSize: 2,
-      // Allow all candidates including localhost for local testing
+      // Larger pool = faster initial candidate gathering before signaling finishes
+      iceCandidatePoolSize: 10,
       iceTransportPolicy: 'all'
     });
 
@@ -183,10 +181,39 @@ class PeerService {
   async getOffer(): Promise<RTCSessionDescriptionInit | undefined> {
     if (this.peer) {
       console.log('Creating offer...');
-      const offer = await this.peer.createOffer();
+      const offer = await this.peer.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true,
+      });
       await this.peer.setLocalDescription(new RTCSessionDescription(offer));
       console.log('Offer created and local description set');
       return offer;
+    }
+  }
+
+  /**
+   * Caps video send bitrate to reduce latency on constrained networks.
+   * Call this after the peer connection is established (e.g. after setLocalDescription on answer).
+   * @param maxKbps Max video bitrate in kbps. Default 800kbps is good for 480p.
+   */
+  async setMaxVideoBitrate(maxKbps = 800) {
+    if (!this.peer) return;
+    const senders = this.peer.getSenders();
+    for (const sender of senders) {
+      if (sender.track?.kind !== 'video') continue;
+      const params = sender.getParameters();
+      if (!params.encodings || params.encodings.length === 0) {
+        params.encodings = [{}];
+      }
+      params.encodings[0].maxBitrate = maxKbps * 1000;
+      // Deprioritize in favour of network latency over quality
+      params.encodings[0].networkPriority = 'high';
+      try {
+        await sender.setParameters(params);
+        console.log(`[Peer] Max video bitrate set to ${maxKbps}kbps`);
+      } catch (e) {
+        console.warn('[Peer] Could not set max bitrate:', e);
+      }
     }
   }
 

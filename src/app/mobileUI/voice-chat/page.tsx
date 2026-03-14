@@ -63,13 +63,13 @@ export default function MobileVoiceChatPage() {
     };
 
     const handleEnd = useCallback(async () => {
-        if (sessionId) { try { await publish(`session_${sessionId}`, { type: 'disconnect', from: clientId }); } catch { } }
+        if (sessionId) { try { await publish(`session:${sessionId}`, { type: 'disconnect', from: clientId }); } catch { } }
         localStreamRef.current?.getTracks().forEach(t => t.stop());
         router.push('/mobileUI/home');
     }, [sessionId, clientId, publish, router]);
 
     const handleSkip = useCallback(async () => {
-        if (sessionId) { try { await publish(`session_${sessionId}`, { type: 'skip', from: clientId }); } catch { } }
+        if (sessionId) { try { await publish(`session:${sessionId}`, { type: 'skip', from: clientId }); } catch { } }
         setIsConnectedToPartner(false); setSessionId(null); setCallDuration(0);
         try { await findVoiceMatch(); } catch { }
     }, [sessionId, clientId, publish, findVoiceMatch]);

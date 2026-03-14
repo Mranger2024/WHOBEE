@@ -689,9 +689,11 @@ const RandomChatPage = () => {
     );
 
     const handleCallAccepted = useCallback(
-        (data: any) => {
+        async (data: any) => {
             if (data.type !== 'answer' || data.to !== clientId) return;
-            peer.setLocalDescription(data.ans);
+            await peer.setLocalDescription(data.ans);
+            // Cap bitrate to prevent encoder buffering latency
+            peer.setMaxVideoBitrate(800);
             console.log("Random chat call accepted!");
 
             posthog?.capture('match_found', {
@@ -749,6 +751,7 @@ const RandomChatPage = () => {
     const handleNegoNeedFinal = useCallback(async (data: any) => {
         if (data.type !== 'peer-nego-final' || data.to !== clientId) return;
         await peer.setLocalDescription(data.ans);
+        peer.setMaxVideoBitrate(800);
     }, [clientId]);
 
     const handleIceCandidate = useCallback(async (data: any) => {

@@ -168,7 +168,7 @@ const TextChatPage = () => {
             }
         }
 
-        publish(`session_${sessionId}`, publishPayload);
+        publish(`session:${sessionId}`, publishPayload);
     }, [inputMessage, sessionId, remotePeerId, clientId, publish, sendTypingIndicator, isSecure]);
 
     const handleKeyPress = useCallback((e: React.KeyboardEvent) => {

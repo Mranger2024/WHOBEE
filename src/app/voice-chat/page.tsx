@@ -81,7 +81,7 @@ const VoiceChatPage = () => {
     peer.peer.ontrack = (ev) => { const [stream] = ev.streams; setRemoteStream(stream); };
     peer.peer.onicecandidate = (ev) => {
       if (ev.candidate && sessionId) {
-        publish(`session_${sessionId}`, { type: 'ice-candidate', from: clientId, candidate: ev.candidate });
+        publish(`session:${sessionId}`, { type: 'ice-candidate', from: clientId, candidate: ev.candidate });
       }
     };
   }, [sessionId, clientId, publish]);
@@ -142,13 +142,13 @@ const VoiceChatPage = () => {
           case 'ice-candidate': handleIceCandidate(sigData); break;
         }
       };
-      const unsubscribe = subscribe(`session_${data.sessionId}`, handleSignaling);
+      const unsubscribe = subscribe(`session:${data.sessionId}`, handleSignaling);
       sessionSubscriptionRef.current = unsubscribe;
       if (clientId && data.partnerId && clientId < data.partnerId) {
         setTimeout(async () => {
           try {
             const offer = await peer.getOffer();
-            if (offer) await publish(`session_${data.sessionId}`, { type: 'offer', from: clientId, offer });
+            if (offer) await publish(`session:${data.sessionId}`, { type: 'offer', from: clientId, offer });
           } catch (e) { console.error(e); }
         }, 1000);
       }
@@ -161,7 +161,7 @@ const VoiceChatPage = () => {
     const answer = await peer.getAnswer(data.offer);
     await processPendingIceCandidates();
     if (answer && activeSessionId) {
-      await publish(`session_${activeSessionId}`, { type: 'answer', from: clientId, answer });
+      await publish(`session:${activeSessionId}`, { type: 'answer', from: clientId, answer });
     }
   }, [sessionId, clientId, publish, processPendingIceCandidates]);
 
@@ -169,6 +169,8 @@ const VoiceChatPage = () => {
     if (!peer.peer) return;
     await peer.peer.setRemoteDescription(new RTCSessionDescription(data.answer));
     await processPendingIceCandidates();
+    // Cap bitrate after handshake to reduce encoder buffering latency
+    peer.setMaxVideoBitrate(800);
   }, [processPendingIceCandidates]);
 
   const handleIceCandidate = useCallback(async (data: IceData) => {

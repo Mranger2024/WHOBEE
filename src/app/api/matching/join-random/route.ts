@@ -126,7 +126,7 @@ export async function POST(req: Request) {
         const clientId = body.clientId;
         const ip = req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || '127.0.0.1';
 
-        // 🚨 Rate Limit Check 🚨
+        //  Rate Limit Check 
         const { success } = await ratelimit.limit(ip);
         if (!success) {
             console.warn(`[RateLimit] Blocked matchmaking request from IP: ${ip}`);

@@ -5,29 +5,15 @@
  * for WebRTC connections. It supports multiple providers with fallback.
  */
 
-// Free TURN server configuration (fallback)
+// Free STUN server configuration (fallback - no TURN relay overhead)
+// These allow direct P2P which is much faster than a shared TURN relay.
+// For symmetric NAT users (~20%), add your own TURN server via TURN_SERVER_URL env var.
 const FREE_TURN_SERVERS = [
-    {
-        urls: 'stun:stun.l.google.com:19302'
-    },
-    {
-        urls: 'stun:stun1.l.google.com:19302'
-    },
-    {
-        urls: 'turn:openrelay.metered.ca:80',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-    },
-    {
-        urls: 'turn:openrelay.metered.ca:443',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-    },
-    {
-        urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-        username: 'openrelayproject',
-        credential: 'openrelayproject'
-    }
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
 ];
 
 /**

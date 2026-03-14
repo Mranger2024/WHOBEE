@@ -67,23 +67,23 @@ export default function MobileTextChatPage() {
         const text = inputValue.trim();
         setInputValue('');
         setMessages(p => [...p, { id: Date.now().toString(), text, sender: 'me', time: 'now' }]);
-        try { await publish(`session_${sessionId}`, { type: 'chat', text, from: clientId }); } catch { }
+        try { await publish(`session:${sessionId}`, { type: 'chat', text, from: clientId }); } catch { }
     }, [inputValue, sessionId, clientId, publish]);
 
     const handleTyping = useCallback(async (val: string) => {
         setInputValue(val);
         if (!sessionId) return;
-        try { await publish(`session_${sessionId}`, { type: 'typing', from: clientId }); } catch { }
+        try { await publish(`session:${sessionId}`, { type: 'typing', from: clientId }); } catch { }
     }, [sessionId, clientId, publish]);
 
     const handleSkip = useCallback(async () => {
-        if (sessionId) { try { await publish(`session_${sessionId}`, { type: 'skip', from: clientId }); } catch { } }
+        if (sessionId) { try { await publish(`session:${sessionId}`, { type: 'skip', from: clientId }); } catch { } }
         setIsConnectedToPartner(false); setSessionId(null); setMessages([]);
         try { await findTextMatch(); } catch { }
     }, [sessionId, clientId, publish, findTextMatch]);
 
     const handleEnd = useCallback(async () => {
-        if (sessionId) { try { await publish(`session_${sessionId}`, { type: 'disconnect', from: clientId }); } catch { } }
+        if (sessionId) { try { await publish(`session:${sessionId}`, { type: 'disconnect', from: clientId }); } catch { } }
         router.push('/mobileUI/home');
     }, [sessionId, clientId, publish, router]);
 

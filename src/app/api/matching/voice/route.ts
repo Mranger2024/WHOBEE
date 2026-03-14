@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
 
         const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || '127.0.0.1';
 
-        // 🚨 Rate Limit Check 🚨
+        // Rate Limit Check
         const { success } = await ratelimit.limit(ip);
         if (!success) {
             console.warn(`[RateLimit] Blocked voice matchmaking request from IP: ${ip}`);
