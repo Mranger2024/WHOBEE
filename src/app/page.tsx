@@ -621,10 +621,11 @@ export default function Home() {
                         <div>
                             <h4 className="text-white font-bold mb-5">Legal</h4>
                             <ul className="space-y-3 text-sm font-medium">
-                                <li><Link href="#" className="hover:text-indigo-400 transition-colors">Privacy Policy</Link></li>
-                                <li><Link href="#" className="hover:text-indigo-400 transition-colors">Terms of Service</Link></li>
-                                <li><Link href="#" className="hover:text-indigo-400 transition-colors">Cookie Policy</Link></li>
-                                <li><Link href="#" className="hover:text-indigo-400 transition-colors">Community Guidelines</Link></li>
+                                <li><Link href="/privacy" className="hover:text-indigo-400 transition-colors">Privacy Policy</Link></li>
+                                <li><Link href="/terms" className="hover:text-indigo-400 transition-colors">Terms of Service</Link></li>
+                                <li><Link href="/cookies" className="hover:text-indigo-400 transition-colors">Cookie Policy</Link></li>
+                                <li><Link href="/guidelines" className="hover:text-indigo-400 transition-colors">Community Guidelines</Link></li>
+                                <li><Link href="/contact" className="hover:text-indigo-400 transition-colors">Contact Us</Link></li>
                             </ul>
                         </div>
                     </div>

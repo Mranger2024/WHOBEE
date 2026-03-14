@@ -7,7 +7,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useCentrifugo } from '@/context/CentrifugoProvider';
 import peer from "@/service/peer";
-import { Mic, MicOff, PhoneOff, SkipForward, Video, ArrowLeft, Sparkles, Shield, Share2, Copy, ShieldCheck, Heart, Flag } from "lucide-react";
+import { Mic, MicOff, PhoneOff, SkipForward, Video, ArrowLeft, Sparkles, Shield, Share2, Copy, ShieldCheck, Heart, Flag, Volume2, VolumeX } from "lucide-react";
 import Link from "next/link";
 import confetti from 'canvas-confetti';
 import Logo from '@/components/Logo';
@@ -49,6 +49,7 @@ const VoiceChatPage = () => {
   const [isAudioEnabled, setIsAudioEnabled] = useState(true);
   const [callDuration, setCallDuration] = useState(0);
   const [reportStatus, setReportStatus] = useState<{ success?: boolean; message?: string } | null>(null);
+  const [isSpeakerEnabled, setIsSpeakerEnabled] = useState(true);
 
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const sessionSubscriptionRef = useRef<(() => void) | null>(null);
@@ -140,6 +141,10 @@ const VoiceChatPage = () => {
           case 'offer': handleIncomingCall(sigData, data.sessionId); break;
           case 'answer': handleAnswer(sigData); break;
           case 'ice-candidate': handleIceCandidate(sigData); break;
+          case 'partner-disconnected':
+          case 'skip':
+            skipChat();
+            break;
         }
       };
       const unsubscribe = subscribe(`session:${data.sessionId}`, handleSignaling);
@@ -199,8 +204,19 @@ const VoiceChatPage = () => {
     setIsAudioEnabled((prev) => !prev);
   };
 
-  const skipChat = async () => { await cancelVoiceMatch(); cleanup(); startVoiceChat(); };
+  const toggleSpeaker = () => {
+    if (remoteAudioRef.current) {
+        remoteAudioRef.current.muted = !remoteAudioRef.current.muted;
+        setIsSpeakerEnabled(!remoteAudioRef.current.muted);
+    }
+  };
+
+  const skipChat = async () => { 
+    if (sessionId) { try { await publish(`session:${sessionId}`, { type: 'skip', from: clientId }); } catch {} }
+    await cancelVoiceMatch(); cleanup(); startVoiceChat(); 
+  };
   const endChat = async () => {
+    if (sessionId) { try { await publish(`session:${sessionId}`, { type: 'partner-disconnected', from: clientId }); } catch {} }
     await cancelVoiceMatch(); cleanup();
     if (myStream) { myStream.getTracks().forEach(track => track.stop()); setMyStream(null); }
   };
@@ -259,11 +275,10 @@ const VoiceChatPage = () => {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
                 </span>
-                <span className="text-xs font-semibold text-emerald-700">Live · {formatDuration(callDuration)}</span>
               </div>
             )}
             <Link href="/" className="flex items-center gap-1.5 text-sm text-slate-600 hover:text-indigo-600 font-semibold transition-colors">
-              <ArrowLeft className="h-4 w-4" /> Home
+              <ArrowLeft className="h-4 w-4" />
             </Link>
           </div>
         </div>
@@ -364,6 +379,14 @@ const VoiceChatPage = () => {
                   title={isAudioEnabled ? "Mute" : "Unmute"}
                 >
                   {isAudioEnabled ? <Mic className="h-6 w-6" /> : <MicOff className="h-6 w-6" />}
+                </button>
+
+                <button
+                  onClick={toggleSpeaker}
+                  className={`h-14 w-14 rounded-full shadow-lg flex items-center justify-center transition-all hover:scale-110 active:scale-95 ${!isSpeakerEnabled ? 'bg-red-500 text-white shadow-red-500/30' : 'bg-white border border-slate-200 text-slate-700 shadow-slate-200'}`}
+                  title={isSpeakerEnabled ? "Speaker Off" : "Speaker On"}
+                >
+                  {isSpeakerEnabled ? <Volume2 className="h-6 w-6" /> : <VolumeX className="h-6 w-6" />}
                 </button>
 
                 <button

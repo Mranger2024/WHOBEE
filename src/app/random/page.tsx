@@ -886,6 +886,7 @@ const RandomChatPage = () => {
             blur_amount: blurAmount
         });
 
+        setIsSearching(true); // Prevent idle UI flash
         disconnectPartner();
         // Slight delay to ensure peer connection is clean before restarting
         setTimeout(() => {
@@ -895,13 +896,16 @@ const RandomChatPage = () => {
 
     const handleChatEnd = useCallback((data: any) => {
         if (data.type !== 'end-chat') return;
+        if (data.from === clientId) return; // Prevent reacting to our own end-chat event
+        
         console.log("Chat ended by partner. Skipping to next...");
+        setIsSearching(true); // Prevent idle UI flash
         // Immediately trigger skip logic so the remaining user isn't stuck alone
         disconnectPartner();
         setTimeout(() => {
             startRandomChat();
         }, 100);
-    }, [disconnectPartner, startRandomChat]);
+    }, [disconnectPartner, startRandomChat, clientId]);
 
     const toggleAudio = useCallback(() => {
         if (rawStreamRef.current) {

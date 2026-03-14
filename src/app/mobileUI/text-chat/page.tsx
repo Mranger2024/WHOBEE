@@ -54,9 +54,12 @@ export default function MobileTextChatPage() {
                 setIsTyping(true);
                 if (typingRef.current) clearTimeout(typingRef.current);
                 typingRef.current = setTimeout(() => setIsTyping(false), 3000);
-            } else if (data.type === 'disconnect' || data.type === 'skip') {
+            } else if (data.type === 'disconnect' || data.type === 'skip' || data.type === 'partner-disconnected') {
                 setMessages(p => [...p, { id: 'sys-end', text: 'Stranger disconnected.', sender: 'partner', time: 'now' }]);
                 setIsConnectedToPartner(false);
+                setTimeout(() => {
+                    handleSkip();
+                }, 1500);
             }
         });
         return unsub;
@@ -112,7 +115,7 @@ export default function MobileTextChatPage() {
                         <div>
                             <p className="font-bold text-white text-sm leading-none">Stranger</p>
                             <p className={`text-[10px] font-medium mt-0.5 ${isConnectedToPartner ? 'text-green-400' : 'text-slate-500'}`}>
-                                {isConnectedToPartner ? '🌐 Connected · WHOBEE' : 'Searching for match...'}
+                                {isConnectedToPartner ? 'Connected' : 'Searching...'}
                             </p>
                         </div>
                     </div>

@@ -49,13 +49,14 @@ export default function MobileVoiceChatPage() {
     // Session subscription
     useEffect(() => {
         if (!sessionId) return;
-        const unsub = subscribe(`session_${sessionId}`, (data: any) => {
-            if (data.type === 'disconnect' || data.type === 'skip') {
+        const unsub = subscribe(`session:${sessionId}`, (data: any) => {
+            if (data.type === 'disconnect' || data.type === 'skip' || data.type === 'partner-disconnected') {
                 setIsConnectedToPartner(false); setSessionId(null); setCallDuration(0);
+                setTimeout(() => { findVoiceMatch().catch(e => console.error(e)); }, 500);
             }
         });
         return unsub;
-    }, [sessionId]);
+    }, [sessionId, subscribe, findVoiceMatch]);
 
     const toggleMic = () => {
         localStreamRef.current?.getAudioTracks().forEach(t => { t.enabled = !isMicOn; });
@@ -103,12 +104,12 @@ export default function MobileVoiceChatPage() {
                     )}
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                    <span className={`w-1.5 h-1.5 rounded-full ${isConnectedToPartner ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`} />
-                    <span className={`text-[10px] font-bold uppercase tracking-wide ${isConnectedToPartner ? 'text-green-400' : 'text-yellow-400'}`}>
-                        {isConnectedToPartner ? 'Connected' : 'Searching'}
-                    </span>
-                </div>
+                {!isConnectedToPartner && (
+                    <div className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
+                        <span className="text-[10px] font-bold uppercase tracking-wide text-yellow-400">Searching</span>
+                    </div>
+                )}
             </header>
 
             {/* ── AVATAR / VISUALIZER ── */}

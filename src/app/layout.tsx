@@ -4,6 +4,7 @@ import "./globals.css";
 import { RealtimeProvider } from "@/context/RealtimeProvider";
 import { CentrifugoProvider } from "@/context/CentrifugoProvider";
 import { CSPostHogProvider } from '@/context/PostHogProvider';
+import AgeVerificationPopup from '@/components/ui/AgeVerificationPopup';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -82,6 +83,7 @@ export default function RootLayout({
         <CSPostHogProvider>
           <CentrifugoProvider>
             <RealtimeProvider>
+              <AgeVerificationPopup />
               {children}
             </RealtimeProvider>
           </CentrifugoProvider>

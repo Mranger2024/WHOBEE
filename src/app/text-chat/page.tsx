@@ -127,7 +127,7 @@ const TextChatPage = () => {
             setIsTyping(data.isTyping);
         } else if (data.type === 'partner-disconnected') {
             setMessages(prev => [...prev, { id: 'sys-end-' + Date.now(), text: "Stranger has disconnected. 👋", sender: 'stranger', timestamp: new Date() }]);
-            setTimeout(() => endCurrentChat(), 2000);
+            setTimeout(() => skipToNext(), 2000);
         }
     }, [clientId, endCurrentChat]);
 
@@ -175,7 +175,19 @@ const TextChatPage = () => {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
     }, [sendMessage]);
 
-    const skipToNext = useCallback(() => { endCurrentChat(); setTimeout(() => startTextChat(), 500); }, [endCurrentChat, startTextChat]);
+    const skipToNext = useCallback(async () => {
+        if (sessionId) publish(`session:${sessionId}`, { type: 'partner-disconnected', from: clientId });
+        await cancelTextMatch();
+        setRemotePeerId(null);
+        setSessionId(null);
+        setIsConnectedToPartner(false);
+        setMessages([]);
+        setIsTyping(false);
+        setIsSecure(false);
+        myKeyPairRef.current = null;
+        sharedSecretRef.current = null;
+        startTextChat();
+    }, [sessionId, clientId, publish, cancelTextMatch, startTextChat]);
 
     const reportUser = useCallback(async () => {
         if (!remotePeerId) return;
