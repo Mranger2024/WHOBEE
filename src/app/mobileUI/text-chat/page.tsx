@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useCentrifugo } from '@/context/CentrifugoProvider';
 import {
     Send, Smile, MoreHorizontal, ArrowLeft, SkipForward,
-    CheckCheck, Plus, PhoneOff, Paperclip, Lock
+    CheckCheck, Plus, PhoneOff, Paperclip, Lock, MessageSquarePlus
 } from 'lucide-react';
+import FeedbackButton from '@/components/ui/FeedbackButton';
 
 interface Message {
     id: string;
@@ -128,6 +129,7 @@ export default function MobileTextChatPage() {
                             Next
                         </button>
                     )}
+                    <FeedbackButton variant="ghost" showText={false} className="w-8 h-8 rounded-full p-0 flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10" />
                     <button onClick={handleEnd} className="w-8 h-8 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 hover:bg-red-500 hover:text-white transition-all active:scale-95">
                         <PhoneOff className="w-4 h-4" />
                     </button>

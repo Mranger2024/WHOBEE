@@ -10,6 +10,7 @@ import Logo from '@/components/Logo';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { generateE2EKeyPair, exportPublicKey, importPublicKey, deriveSharedSecret, encryptMessage, decryptMessage, EncryptedPayload } from '@/lib/encryption';
 import "@/app/globals.css";
+import FeedbackButton from "@/components/ui/FeedbackButton";
 
 interface Message {
     id: string;
@@ -243,6 +244,8 @@ const TextChatPage = () => {
                         <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest ml-2 bg-slate-100 px-2.5 py-1 rounded-full hidden sm:inline-block border border-slate-200">Text Chat</span>
                     </Link>
                     <div className="flex items-center gap-3">
+                        <FeedbackButton variant="ghost" showText={false} className="hidden sm:inline-flex" />
+                        <div className="h-6 w-px bg-slate-200 hidden sm:block" />
                         {isConnectedToPartner && (
                             <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-100">
                                 <span className="relative flex h-2 w-2">

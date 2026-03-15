@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useCentrifugo } from '@/context/CentrifugoProvider';
 import {
     Mic, MicOff, Video, VideoOff, PhoneOff, SkipForward,
-    MessageSquare, Flag, Heart, Smile, Zap, Wifi, RotateCcw
+    MessageSquare, Flag, Heart, Smile, Zap, Wifi, RotateCcw, MessageSquarePlus
 } from 'lucide-react';
+import FeedbackButton from '@/components/ui/FeedbackButton';
 
 export default function MobileVideoChatPage() {
     const router = useRouter();
@@ -142,9 +143,12 @@ export default function MobileVideoChatPage() {
                         )}
                     </div>
 
-                    <button className="w-8 h-8 rounded-full bg-black/30 backdrop-blur-sm border border-white/10 flex items-center justify-center text-red-400/60 hover:text-red-400 transition-colors">
-                        <Flag className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <FeedbackButton variant="ghost" showText={false} className="w-8 h-8 rounded-full bg-black/30 backdrop-blur-sm border border-white/10 flex items-center justify-center text-white/50 hover:text-white p-0" />
+                        <button className="w-8 h-8 rounded-full bg-black/30 backdrop-blur-sm border border-white/10 flex items-center justify-center text-red-400/60 hover:text-red-400 transition-colors">
+                            <Flag className="w-3.5 h-3.5" />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Floating reaction */}

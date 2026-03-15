@@ -17,24 +17,24 @@ export type WorldTourRegion = {
  */
 export const WORLD_TOUR_SCHEDULE: WorldTourRegion[] = [
     {
-        id: 'na',
-        name: 'North America Night',
-        description: 'Connecting you to the Western Hemisphere.',
-        anchorTimezone: 'America/New_York', // Target: 9pm - 11pm EST
-        utcStartHour: 1, // 1:00 AM UTC (Next day) = 9:00 PM EST (Previous day)
+        id: 'asia_east',
+        name: 'East Asia & Oceania',
+        description: 'From Tokyo neon to Australian shores.',
+        anchorTimezone: 'Asia/Tokyo', // Target: 9pm - 11pm JST
+        utcStartHour: 12, // 12:00 UTC = 21:00 JST
         durationHours: 2,
-        dayIndex: 1, // Monday UTC (Sunday EST night)
-        centerCoords: [39.0, -95.0] // Center of US
+        dayIndex: 1, // Monday
+        centerCoords: [20.0, 130.0]
     },
     {
-        id: 'sa',
-        name: 'South America Night',
-        description: 'Experience the electric energy of Latin America.',
-        anchorTimezone: 'America/Sao_Paulo', // Target: 9pm - 11pm BRT
-        utcStartHour: 0, // 0:00 AM UTC (Next day) = 9:00 PM BRT (Previous day)
+        id: 'asia_west',
+        name: 'West Asia Night',
+        description: 'Connecting the Middle East and the Indian Subcontinent.',
+        anchorTimezone: 'Asia/Kolkata', // Target: 9pm - 11pm IST
+        utcStartHour: 15, // 15:30 UTC = 21:00 IST (using 15:00 for simplicity)
         durationHours: 2,
-        dayIndex: 2, // Tuesday UTC (Monday BRT night)
-        centerCoords: [-14.2, -51.9] // Brazil
+        dayIndex: 2, // Tuesday
+        centerCoords: [25.0, 60.0]
     },
     {
         id: 'eu_af',
@@ -43,39 +43,38 @@ export const WORLD_TOUR_SCHEDULE: WorldTourRegion[] = [
         anchorTimezone: 'Europe/Paris', // Target: 9pm - 11pm CET
         utcStartHour: 20, // 20:00 UTC = 21:00 CET
         durationHours: 2,
-        dayIndex: 3, // Wednesday UTC
-        centerCoords: [20.0, 15.0] // Midpoint Europe/Africa
+        dayIndex: 3, // Wednesday
+        centerCoords: [20.0, 15.0]
     },
     {
-        id: 'asia_west',
-        name: 'West Asia Night',
-        description: 'Connecting the Middle East and the Indian Subcontinent.',
-        anchorTimezone: 'Asia/Kolkata', // Target: 9pm - 11pm IST
-        utcStartHour: 15, // 15:30 UTC = 21:00 IST (We'll use 15:00 UTC for simplicity: 8:30pm-10:30pm IST)
+        id: 'sa',
+        name: 'South America Night',
+        description: 'Experience the electric energy of Latin America.',
+        anchorTimezone: 'America/Sao_Paulo', // Target: 10pm BRT
+        utcStartHour: 1, // 01:00 UTC = 22:00 BRT
         durationHours: 2,
-        dayIndex: 4, // Thursday UTC
-        centerCoords: [25.0, 60.0] // Middle East / India
+        dayIndex: 5, // Friday UTC (Thursday BRT Night)
+        centerCoords: [-14.2, -51.9]
     },
     {
-        id: 'asia_east',
-        name: 'East Asia & Oceania',
-        description: 'From Tokyo neon to Australian shores.',
-        anchorTimezone: 'Asia/Tokyo', // Target: 9pm - 11pm JST
-        utcStartHour: 12, // 12:00 UTC = 21:00 JST
+        id: 'na',
+        name: 'North America Night',
+        description: 'Connecting you to the Western Hemisphere.',
+        anchorTimezone: 'America/New_York', // Target: 9pm EST
+        utcStartHour: 2, // 02:00 UTC = 21:00 EST
         durationHours: 2,
-        dayIndex: 5, // Friday UTC
-        centerCoords: [20.0, 130.0] // East Asia / Australia
+        dayIndex: 6, // Saturday UTC (Friday EST Night)
+        centerCoords: [39.0, -95.0]
     },
-    // Weekend Free-For-All
     {
         id: 'global',
         name: 'Global Free-For-All',
-        description: 'Borders are open. The entire world is online.',
+        description: 'Borders are open. The entire world is online all weekend.',
         anchorTimezone: 'UTC',
         utcStartHour: 0,
-        durationHours: 48, // 48-hour weekend event
-        dayIndex: 6, // Saturday UTC (runs through Sunday)
-        centerCoords: [0, 0] // Equator
+        durationHours: 48,
+        dayIndex: 6, // Starts Saturday 00:00 UTC
+        centerCoords: [0, 0]
     }
 ];
 

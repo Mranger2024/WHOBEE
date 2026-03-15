@@ -48,6 +48,7 @@ import { usePostHog } from 'posthog-js/react';
 import { useReactionRecorder } from "@/hooks/useReactionRecorder";
 
 import "@/app/globals.css";
+import FeedbackButton from "@/components/ui/FeedbackButton";
 
 const honeycombBackground = {
     backgroundImage: `
@@ -1202,6 +1203,11 @@ const RandomChatPage = () => {
                             <Logo size="md" />
                             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest ml-2 bg-white/50 border border-white/20 px-2 py-0.5 rounded-full hidden sm:inline-block">Video Chat</span>
                         </Link>
+
+                        <div className="flex items-center gap-3">
+                            <FeedbackButton variant="ghost" showText={false} className="hidden sm:inline-flex" />
+                            <div className="h-6 w-px bg-slate-200/30 hidden sm:block" />
+                        </div>
 
                         <div className="h-6 w-px bg-gray-200/50 hidden md:block"></div>
 

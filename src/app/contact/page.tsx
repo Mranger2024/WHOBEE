@@ -140,7 +140,7 @@ export default function ContactPage() {
                     <div>
                         <h4 className="font-bold text-slate-900 mb-1">Direct Email</h4>
                         <p className="text-sm text-slate-600 mb-2">Prefer to email us directly? Reach out to support.</p>
-                        <a href="mailto:support@whobee.app" className="text-indigo-600 font-bold hover:underline">support@whobee.app</a>
+                        <a href="mailto:support@whobee.live" className="text-indigo-600 font-bold hover:underline">support@whobee.live</a>
                     </div>
                 </div>
                 

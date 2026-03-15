@@ -5,8 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useCentrifugo } from '@/context/CentrifugoProvider';
 import {
     Mic, MicOff, PhoneOff, Volume2, VolumeX,
-    SkipForward, Flag, MessageSquare, ArrowLeft, Wifi
+    SkipForward, Flag, MessageSquare, ArrowLeft, Wifi, MessageSquarePlus
 } from 'lucide-react';
+import FeedbackButton from '@/components/ui/FeedbackButton';
 
 export default function MobileVoiceChatPage() {
     const router = useRouter();
@@ -110,6 +111,8 @@ export default function MobileVoiceChatPage() {
                         <span className="text-[10px] font-bold uppercase tracking-wide text-yellow-400">Searching</span>
                     </div>
                 )}
+
+                <FeedbackButton variant="ghost" showText={false} className="w-9 h-9 text-slate-400 hover:text-white p-0 flex items-center justify-center" />
             </header>
 
             {/* ── AVATAR / VISUALIZER ── */}

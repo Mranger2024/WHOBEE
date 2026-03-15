@@ -6,9 +6,22 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Video, Settings, ArrowRight, Music, Heart, Gamepad, Film, Coffee, Dumbbell, Camera, Code, Mic, MessageSquare } from "lucide-react";
-import FuturisticLobby from "@/components/FuturisticLobby";
+import dynamic from 'next/dynamic';
+
+const FuturisticLobby = dynamic(() => import('@/components/FuturisticLobby'), { 
+    ssr: false, 
+    loading: () => (
+        <div className="w-full h-full min-h-[500px] flex items-center justify-center bg-gray-900/5 rounded-[2rem] animate-pulse">
+            <div className="flex flex-col items-center gap-4 text-gray-400">
+                <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-500 rounded-full animate-spin"></div>
+                <p className="font-orbitron font-medium tracking-widest text-sm">LOADING GLOBE...</p>
+            </div>
+        </div>
+    ) 
+});
 import { getTourStatus, WindowStatus } from "@/lib/world-tour";
 import NotificationModal from "@/components/NotificationModal";
+import FeedbackButton from "@/components/ui/FeedbackButton";
 
 const LobbyScreen = () => {
     const router = useRouter();
@@ -282,14 +295,17 @@ const LobbyScreen = () => {
                                     </div>
                                 </Button>
 
-                                <Button
-                                    variant="ghost"
-                                    onClick={() => router.push('/')}
-                                    className="w-full text-gray-500 hover:text-gray-900 hover:bg-gray-100/50"
-                                >
-                                    <ArrowRight className="mr-2 h-4 w-4" />
-                                    Back to Home
-                                </Button>
+                                <div className="flex gap-2">
+                                    <Button
+                                        variant="ghost"
+                                        onClick={() => router.push('/')}
+                                        className="flex-1 text-gray-500 hover:text-gray-900 hover:bg-gray-100/50"
+                                    >
+                                        <ArrowRight className="mr-2 h-4 w-4" />
+                                        Back to Home
+                                    </Button>
+                                    <FeedbackButton variant="outline" className="flex-1" />
+                                </div>
                             </div>
                         </div>
                     )}

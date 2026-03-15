@@ -8,8 +8,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import Logo from '@/components/Logo';
-import RegionMap from '@/components/RegionMap';
-import { getTourStatus, formatLocalTime, WindowStatus } from '@/lib/world-tour';
+import TourStatusDisplay from '@/components/TourStatusDisplay';
+import FeedbackButton from '@/components/ui/FeedbackButton';
 
 export default function Home() {
     const router = useRouter();
@@ -17,40 +17,13 @@ export default function Home() {
     const [scrolled, setScrolled] = useState(false);
     const [hoveredNav, setHoveredNav] = useState<string | null>(null);
     const [openFaq, setOpenFaq] = useState<number | null>(null);
-    const [tourStatus, setTourStatus] = useState<WindowStatus | null>(null);
-    const [timeLeft, setTimeLeft] = useState<{ hours: string; minutes: string; seconds: string } | null>(null);
 
     useEffect(() => {
         const handleScroll = () => setScrolled(window.scrollY > 20);
         window.addEventListener('scroll', handleScroll);
 
-        // Initialize status and live countdown for world tour preview
-        const initialStatus = getTourStatus();
-        setTourStatus(initialStatus);
-
-        const intervalId = setInterval(() => {
-            const currentStatus = getTourStatus();
-            setTourStatus(currentStatus);
-
-            if (currentStatus.isOpen) {
-                setTimeLeft(null);
-            } else {
-                const totalSeconds = currentStatus.secondsUntilNext;
-                const h = Math.floor(totalSeconds / 3600);
-                const m = Math.floor((totalSeconds % 3600) / 60);
-                const s = totalSeconds % 60;
-
-                setTimeLeft({
-                    hours: h.toString().padStart(2, '0'),
-                    minutes: m.toString().padStart(2, '0'),
-                    seconds: s.toString().padStart(2, '0')
-                });
-            }
-        }, 1000);
-
         return () => {
             window.removeEventListener('scroll', handleScroll);
-            clearInterval(intervalId);
         };
     }, []);
 
@@ -164,6 +137,8 @@ export default function Home() {
                             >
                                 FAQ
                             </Link>
+
+                            <FeedbackButton variant="ghost" className="mr-2" />
 
                             <div className="h-6 w-px bg-slate-200/80 mx-2" />
 
@@ -370,44 +345,7 @@ export default function Home() {
                                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                             </button>
                         </div>
-                        <div className="relative aspect-square md:aspect-auto md:h-full min-h-[400px]">
-                            <div className="absolute inset-0 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-full blur-[120px] opacity-20 animate-pulse"></div>
-                            {tourStatus ? (
-                                tourStatus.isOpen ? (
-                                    <div className="relative w-full h-full border border-purple-500/30 rounded-3xl bg-black/40 backdrop-blur-xl flex flex-col items-center justify-center p-8 overflow-hidden shadow-[0_0_50px_rgba(purple,0.3)]">
-                                        <RegionMap regionId={tourStatus.currentEvent?.id || 'global'} className="w-24 h-24 text-purple-400 mb-6 drop-shadow-[0_0_15px_rgba(purple,0.5)]" />
-                                        <h3 className="text-3xl font-black text-white text-center mb-2 tracking-tight uppercase">
-                                            {tourStatus.currentEvent?.name || "LIVE NOW"}
-                                        </h3>
-                                        <p className="text-purple-300 text-sm mb-6 text-center font-bold animate-[pulse_2s_ease-in-out_infinite]">Window is Open. Instant Matches.</p>
-                                        <button onClick={() => router.push('/lobby')} className="bg-purple-500 hover:bg-purple-400 text-white font-bold py-4 px-8 rounded-2xl shadow-lg shadow-purple-500/20 active:scale-95 transition-all flex items-center gap-2">
-                                            <Zap className="w-5 h-5 fill-white" /> Enter Matchmaking
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <div className="relative w-full h-full border border-white/10 rounded-3xl bg-black/40 backdrop-blur-xl flex flex-col items-center justify-center p-8 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.5)]">
-                                        <RegionMap regionId={tourStatus.nextEvent.id} className="w-48 h-48 text-indigo-400 mb-6 opacity-80" />
-                                        <h3 className="text-2xl font-black text-white text-center mb-2 tracking-tight uppercase text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-pink-400">
-                                            {tourStatus.nextEvent.name}
-                                        </h3>
-                                        <p className="text-slate-400 text-sm mb-6 text-center">
-                                            Doors open at <span className="text-white font-bold">{formatLocalTime(tourStatus.nextOpenDate)}</span>
-                                        </p>
-                                        <div className="text-center font-[family-name:var(--font-orbitron)] text-4xl text-white tracking-[0.1em] bg-black/60 px-8 py-5 rounded-2xl border border-white/10 shadow-inner">
-                                            {timeLeft ? `${timeLeft.hours}:${timeLeft.minutes}:${timeLeft.seconds}` : "--:--:--"}
-                                        </div>
-                                    </div>
-                                )
-                            ) : (
-                                <div className="relative w-full h-full border border-white/10 rounded-3xl bg-black/40 backdrop-blur-xl flex flex-col items-center justify-center p-8 overflow-hidden">
-                                    <Globe className="w-48 h-48 text-indigo-400 mb-6 opacity-30 animate-[spin_10s_linear_infinite]" />
-                                    <h3 className="text-2xl font-black text-white text-center mb-2 tracking-tight uppercase opacity-50">SYNCING...</h3>
-                                    <div className="text-center font-[family-name:var(--font-orbitron)] text-4xl text-white/50 tracking-[0.1em] bg-black/60 px-8 py-5 rounded-2xl border border-white/10 shadow-inner mt-8">
-                                        --:--:--
-                                    </div>
-                                </div>
-                            )}
-                        </div>
+                            <TourStatusDisplay />
                     </div>
                 </div>
             </section>
@@ -626,6 +564,7 @@ export default function Home() {
                                 <li><Link href="/cookies" className="hover:text-indigo-400 transition-colors">Cookie Policy</Link></li>
                                 <li><Link href="/guidelines" className="hover:text-indigo-400 transition-colors">Community Guidelines</Link></li>
                                 <li><Link href="/contact" className="hover:text-indigo-400 transition-colors">Contact Us</Link></li>
+                                <li className="pt-2"><FeedbackButton variant="outline" className="w-full justify-center" /></li>
                             </ul>
                         </div>
                     </div>
