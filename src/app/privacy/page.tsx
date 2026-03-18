@@ -1,5 +1,12 @@
 import React from 'react';
 import LegalLayout from '@/components/ui/LegalLayout';
+import { Metadata } from 'next';
+
+export const metadata: Metadata = {
+    title: 'Privacy Policy',
+    description: 'Read the WHOBEE Privacy Policy. We do not collect personal data, require registration, or store your video and audio. Your privacy is our top priority.',
+    alternates: { canonical: 'https://whobee.live/privacy' },
+};
 
 export default function PrivacyPolicy() {
     return (

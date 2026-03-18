@@ -1,0 +1,43 @@
+# WHOBEE
+> WHOBEE is a free, 100% anonymous random chat platform. Connect with strangers worldwide via video, voice, or text — no account required.
+
+## What is WHOBEE?
+
+WHOBEE is a WebRTC peer-to-peer (P2P) anonymous video, voice, and text chat platform. It is a modern, privacy-first alternative to Omegle. Key features include:
+
+- **Blur Technology:** Video starts blurred and gradually reveals as conversations deepen.
+- **End-to-End Encrypted Text Chat:** Messages are encrypted using ECDH + AES-GCM and cannot be read by WHOBEE servers.
+- **World Tour:** A weekly schedule of regional matchmaking events targeting Asia, Europe, South America, and North America.
+- **No Registration:** Zero sign-up required. Start chatting instantly.
+- **Multi-modal:** Video chat, voice-only chat, and text chat modes.
+- **Cross-platform:** Works on all modern browsers, iOS, and Android.
+
+## Who is WHOBEE For?
+
+WHOBEE is for adults (18+) who want to:
+- Meet new people online in a safe, anonymous environment.
+- Practice languages with native speakers worldwide.
+- Have spontaneous conversations with strangers globally.
+- Explore the World Tour to connect with specific regions.
+
+## Platform Safety
+
+WHOBEE has a strict community policy:
+- Zero tolerance for illegal content, harassment, and hate speech.
+- Community-driven reporting system.
+- Automated abuse detection with IP bans.
+- Users must certify they are 18+ before entering chats.
+
+## Key Pages
+
+- **Home:** https://whobee.live
+- **Blog:** https://whobee.live/blog
+- **World Tour:** https://whobee.live/world-tour
+- **Community Guidelines:** https://whobee.live/guidelines
+- **Privacy Policy:** https://whobee.live/privacy
+- **Terms of Service:** https://whobee.live/terms
+- **Contact & Support:** https://whobee.live/contact
+
+## Contact
+
+Email: support@whobee.live

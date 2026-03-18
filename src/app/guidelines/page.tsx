@@ -1,5 +1,12 @@
 import React from 'react';
 import LegalLayout from '@/components/ui/LegalLayout';
+import { Metadata } from 'next';
+
+export const metadata: Metadata = {
+    title: 'Community Guidelines',
+    description: 'WHOBEE Community Guidelines. Learn what behaviors are allowed, our zero-tolerance policy on harassment and illegal content, and how to stay safe while chatting anonymously.',
+    alternates: { canonical: 'https://whobee.live/guidelines' },
+};
 
 export default function CommunityGuidelines() {
     return (

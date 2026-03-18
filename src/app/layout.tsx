@@ -5,6 +5,7 @@ import { RealtimeProvider } from "@/context/RealtimeProvider";
 import { CentrifugoProvider } from "@/context/CentrifugoProvider";
 import { CSPostHogProvider } from '@/context/PostHogProvider';
 import AgeVerificationPopup from '@/components/ui/AgeVerificationPopup';
+import JsonLd from '@/components/JsonLd';
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,23 +24,34 @@ const orbitron = Orbitron({
 });
 
 export const metadata: Metadata = {
-  title: "WHOBEE - Connect With Anyone",
-  description: "WHOBEE's unique phased-blur technology lets you connect with your personality first. Instant matching, anonymous video and text chat.",
+  metadataBase: new URL('https://whobee.live'),
+  title: {
+    default: "WHOBEE - Anonymous Video Chat & Meet Strangers Online",
+    template: "%s | WHOBEE",
+  },
+  description: "WHOBEE is a free, anonymous video, voice, and text chat platform. Meet strangers online instantly with no sign-up required. Featuring unique blur technology and end-to-end encryption.",
+  keywords: ["anonymous video chat", "meet strangers online", "random video chat", "omegle alternative", "video chat no sign up", "anonymous chat", "whobee", "random chat", "webcam chat"],
+  authors: [{ name: "WHOBEE Team" }],
+  creator: "WHOBEE",
+  publisher: "WHOBEE",
+  alternates: {
+    canonical: 'https://whobee.live',
+  },
   icons: {
     icon: "/whobee.png",
     apple: "/whobee.png",
   },
   openGraph: {
     title: "WHOBEE - Meet Strangers, Make Real Connections",
-    description: "Start blurred, then slowly reveal. Join thousands online right now for instant matching and 100% anonymous video chat.",
-    url: "https://whobee.vercel.app",
+    description: "Start blurred, then slowly reveal. 100% anonymous video, voice & text chat. No account needed. Connect with the world — right now.",
+    url: "https://whobee.live",
     siteName: "WHOBEE",
     images: [
       {
         url: "/whobee-og.png",
         width: 1200,
         height: 630,
-        alt: "WHOBEE Video Chat Preview",
+        alt: "WHOBEE - Anonymous Video Chat Platform",
       }
     ],
     locale: "en_US",
@@ -47,11 +59,25 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "WHOBEE - Connect With Anyone",
-    description: "Instant matching and 100% anonymous video chat with phased-blur technology.",
+    title: "WHOBEE - Free Anonymous Video Chat",
+    description: "Meet strangers online instantly. 100% anonymous, no sign-up, E2E encrypted. WebRTC P2P with blur technology.",
+    site: "@whobee",
+    creator: "@whobee",
     images: ["/whobee-og.png"],
   },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
 };
+
 
 export default function RootLayout({
   children,
@@ -81,6 +107,7 @@ export default function RootLayout({
           }}
         ></div>
         <CSPostHogProvider>
+          <JsonLd />
           <CentrifugoProvider>
             <RealtimeProvider>
               <AgeVerificationPopup />

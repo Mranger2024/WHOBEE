@@ -1,5 +1,12 @@
 import React from 'react';
 import LegalLayout from '@/components/ui/LegalLayout';
+import { Metadata } from 'next';
+
+export const metadata: Metadata = {
+    title: 'Terms of Service',
+    description: 'Read the WHOBEE Terms of Service. By using our anonymous video and text chat platform, you agree to our rules on age requirements, conduct, and acceptable use.',
+    alternates: { canonical: 'https://whobee.live/terms' },
+};
 
 export default function TermsOfService() {
     return (

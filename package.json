@@ -31,6 +31,7 @@
     "firebase": "^12.10.0",
     "firebase-admin": "^13.7.0",
     "framer-motion": "^12.34.3",
+    "gray-matter": "^4.0.3",
     "ioredis": "^5.4.1",
     "jose": "^6.1.2",
     "jsonwebtoken": "^9.0.2",
